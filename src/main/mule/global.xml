@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:openair="http://www.mulesoft.org/schema/mule/openair"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+        http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+
+        http://www.mulesoft.org/schema/mule/ee/core
+        http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+
+        http://www.mulesoft.org/schema/mule/openair
+        http://www.mulesoft.org/schema/mule/openair/current/mule-openair.xsd
+
+        http://www.mulesoft.org/schema/mule/salesforce
+        http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+
+        http://www.mulesoft.org/schema/mule/wsc
+        http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd
+
+        http://www.mulesoft.org/schema/mule/file
+        http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+
+        http://www.mulesoft.org/schema/mule/http
+        http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+
+        http://www.mulesoft.org/schema/mule/secure-properties
+        http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd
+      
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd">
+	<configuration
+		defaultErrorHandler-ref="globalErrorHandler" />
+	<!-- <configuration-properties doc:name="Configuration properties" file="properties/common-properties.yaml" 
+		/> --><!-- <secure-properties:config name="Secure_Properties_Config" file="properties/secure-${mule.env}.yaml" 
+		key="${secure.key}" doc:name="Secure Properties Config" doc:id="doc-e25305c3" 
+		/> --><!-- <http:request-config name="Openair_soapConfig" doc:name="openair-soap 
+		placeholder config (review host before deploy)"> <http:request-connection 
+		protocol="HTTPS" host="${openair-soap.host}" port="${openair-soap.port}" 
+		/> </http:request-config> -->
+	<!-- <http:request-config name="Mule_secure_propertiesConfig" doc:name="mule-secure-properties 
+		placeholder config (review host before deploy)"> <http:request-connection 
+		protocol="HTTPS" host="${mule-secure-properties.host}" port="${mule-secure-properties.port}" 
+		/> </http:request-config> -->
+	<salesforce:sfdc-config name="salesforceConfig"
+		doc:name="Salesforce Config"
+		doc:id="c0577305-4c6f-44e8-984f-6d7acada01c3">
+		<salesforce:jwt-connection
+			consumerKey="${secure::salesforce.consumerKey}"
+			keyStore="${keystore.path}"
+			storePassword="${secure::salesforce.password}"
+			principal="${secure::salesforce.user}"
+			certificateAlias="${secure::salesforce.certificate}"
+			tokenEndpoint="${salesforce.tokenEndpoint}" />
+	</salesforce:sfdc-config>
+	<!-- <email:smtps-config name="Email_SMTP_Config" doc:name="Email SMTPS 
+		Config" doc:id="doc-791af7c9"> <email:smtps-connection host="${email.smtp.host}" 
+		port="${email.smtp.port}" user="${secure::email.smtp.username}" password="${secure::email.smtp.password}" 
+		doc:id="doc-c6aece7b" /> </email:smtps-config> -->
+	<http:request-config name="wscHttpRequestConfig"
+		doc:name="HTTP Request config"
+		doc:id="8f9a308a-817a-46e5-beb9-7f090b179b8a" responseTimeout="120000"
+		requestStreamingMode="NEVER">
+	</http:request-config>
+	<http:listener-config
+		name="HTTP_Listener_config_test" doc:name="HTTP Listener config"
+		doc:id="aeecb4bc-e9ea-498f-b861-6697ebd34e11">
+		<http:listener-connection host="0.0.0.0"
+			port="8081" />
+	</http:listener-config>
+
+	<wsc:config name="webServiceConsumerConfigHttp"
+		doc:name="Web Service Consumer Config"
+		doc:id="300b81b2-09b1-40f4-b385-a58ec2bf156a">
+		<wsc:connection
+			wsdlLocation="https://coalfire.app.sandbox.netsuitesuiteprojectspro.com/wsdl.pl?style=document"
+			service="OAirServiceHandlerService" port="OAirService"
+			address="https://coalfire.app.sandbox.netsuitesuiteprojectspro.com/soapdoc">
+			<wsc:custom-transport-configuration>
+				<wsc:http-transport-configuration
+					requesterConfig="wscHttpRequestConfig" />
+			</wsc:custom-transport-configuration>
+			<wsc:web-service-security
+				actor="http://schemas.xmlsoap.org/soap/actor/next" />
+
+		</wsc:connection>
+	</wsc:config>
+	<secure-properties:config
+		name="securePropertiesConfig" doc:name="Secure Properties Config"
+		doc:id="0a6cac9a-58b1-4f53-95da-6316dc3024ce"
+		file="properties\secure-${mule.env}.yaml" key='${secure.key}'>
+		<secure-properties:encrypt
+			algorithm="Blowfish" />
+	</secure-properties:config>
+	<global-property doc:name="Global Property"
+		doc:id="1e8a72f1-ea9e-4962-a9ce-0eeba61dfb6b" name="mule.env"
+		value="dev" />
+	<global-property doc:name="Global Property"
+		doc:id="e458a6e7-3403-42a4-8b2e-a6e42371479a" name="secure.key"
+		value="mule" />
+	<!-- <email:smtp-config name="emailSMTP" doc:name="Email SMTP" doc:id="efa670fa-9dac-4773-a2b9-61c3eafa0e66" 
+		> </email:smtp-config> -->
+	<configuration-properties doc:name="Configuration properties" doc:id="d4fd0f61-3e45-4919-8814-3c652faa2a04" file="properties\common-properties.yaml" />
+	<configuration-properties doc:name="Configuration properties" doc:id="0ce10505-7069-4492-aee0-44c6037f9b73" file="properties\secure-${mule.env}.yaml" />
+	<error-handler name="globalErrorHandler"
+		doc:id="8a0bf480-74bf-413d-a114-3d59f0c75347">
+		<on-error-propagate enableNotifications="true"
+			logException="true" doc:name="On Error Propagate"
+			doc:id="d5e09ac6-adcd-4b7d-895c-bc927606023f"
+			type="APP:PROCESS_ERROR">
+			<logger level="INFO" doc:name="Logger"
+				doc:id="8fd85536-e18b-43ed-849b-5407f75e4f36"
+				message='#["Salesforce query failure sending notification email" ++ vars.correlationId]' />
+			<ee:transform doc:name="Transform Message" doc:id="137442be-9054-47c7-8fc3-f8440278936c" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output text/plain
+---
+"<html>
+<body>
+<p>Hi Team,</p>
+
+<p>
+The Opportunity Project Sync process has completed.
+Opportunity is failed during intial data retrieval phase so no Lineitmes are processed 
+</p>
+
+
+<p>Please review the above Opportunities and take the necessary action.</p>
+
+<p>Thanks,<br/>
+Integration Team</p>
+
+</body>
+</html>"]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<flow-ref doc:name="sent-mail-notification-subflow" doc:id="05074457-1457-4f51-8cf6-1d53f5914fd2" 
+				name="sent-mail-notification-subflow"/>
+		</on-error-propagate>
+	</error-handler>
+	<http:request-config
+		name="Graph_Token_Request_config"
+		doc:name="HTTP Request config - Entra ID token"
+		responseTimeout="30000">
+		<http:request-connection protocol="HTTPS"
+			host="login.microsoftonline.com" />
+	</http:request-config>
+
+	<!-- Microsoft Graph -->
+	<http:request-config
+		name="Graph_API_Request_config"
+		doc:name="HTTP Request config - Microsoft Graph"
+		responseTimeout="30000">
+		<http:request-connection protocol="HTTPS"
+			host="graph.microsoft.com" />
+	</http:request-config>
+</mule>

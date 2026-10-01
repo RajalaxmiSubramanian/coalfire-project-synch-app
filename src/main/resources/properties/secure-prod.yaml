@@ -1,0 +1,14 @@
+salesforce:
+  clientId: "your-client-id"
+  clientSecret: "CHANGEME"
+  username: "your-username@example.com"
+  password: "your-password"
+  tokenEndpoint: "CHANGEME"
+openair:
+  username: "CHANGEME"
+  password: "CHANGEME"
+  apiKey: "CHANGEME"
+email:
+  smtp:
+    username: "CHANGEME"
+    password: "CHANGEME"

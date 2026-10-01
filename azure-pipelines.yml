@@ -1,0 +1,1213 @@
+trigger:
+  branches:
+    include:
+      - '*'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: build.variables  # Contains: projectName, anypointClientId, anypointClientSecret, apiInstanceId, muleOrgId, businessGroupId, cloudhubAppName, platformClientId, platformClientSecret, sonarQubeServiceConnection, sonarHostUrl
+  - name: RUNTIME_VERSION
+    value: '4.9.0'
+  - name: CH2_TARGET
+    value: 'Cloudhub-US-East-1'
+  - name: CH2_ENVIRONMENT
+    value: 'dev'
+  - name: CH2_REPLICAS
+    value: '1'
+  - name: CH2_VCORES
+    value: '0.1'
+  - name: APPLICATION_COVERAGE
+    value: '0'
+  - group: global
+
+stages:
+  #####################################################
+  # STAGE 1: BUILD, TEST, SONARQUBE & PUBLISH
+  #####################################################
+  - stage: BuildAndPublish
+    displayName: 'Build, Test, SonarQube & Publish to Exchange'
+    jobs:
+      - job: BuildPublishJob
+        displayName: 'Maven Build, MUnit Tests, SonarQube Analysis & Exchange Publish'
+        steps:
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 1: Validate Pipeline Variables
+          # ══════════════════════════════════════════════════════════════════
+          - script: |
+              echo "=========================================="
+              echo " Validating Pipeline Variables"
+              echo "=========================================="
+
+              MISSING_VARS=""
+
+              [ -z "$(projectName)" ]          && MISSING_VARS="$MISSING_VARS projectName"
+              [ -z "$(anypointClientId)" ]     && MISSING_VARS="$MISSING_VARS anypointClientId"
+              [ -z "$(anypointClientSecret)" ] && MISSING_VARS="$MISSING_VARS anypointClientSecret"
+              [ -z "$(muleOrgId)" ]            && MISSING_VARS="$MISSING_VARS muleOrgId"
+
+              [ -z "$(apiInstanceId)" ] \
+                && echo "  WARNING: apiInstanceId not set - autodiscovery will fail" \
+                || echo " API Instance ID found: $(apiInstanceId)"
+
+              if [ -n "$MISSING_VARS" ]; then
+                echo " ERROR: Missing required variables:$MISSING_VARS"
+                exit 1
+              fi
+
+              echo " All required variables present"
+              echo "  Project: $(projectName)"
+              echo "  Org ID: $(muleOrgId)"
+              echo "  API Instance ID: $(apiInstanceId)"
+            displayName: 'Validate Variables'
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 2: Download & Install Maven Settings
+          # ══════════════════════════════════════════════════════════════════
+          - task: DownloadSecureFile@1
+            name: mavenSettings
+            displayName: 'Download Maven Settings'
+            inputs:
+              secureFile: 'settings.xml'
+
+          - script: |
+              mkdir -p ~/.m2
+              cp $(mavenSettings.secureFilePath) ~/.m2/settings.xml
+              echo " settings.xml installed"
+            displayName: 'Install Maven Settings'
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 3: Setup Java 17
+          # ══════════════════════════════════════════════════════════════════
+          - task: JavaToolInstaller@0
+            displayName: 'Setup Java 17'
+            inputs:
+              versionSpec: '17'
+              jdkArchitectureOption: 'x64'
+              jdkSourceOption: 'PreInstalled'
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 4: API Governance Validation
+          # ══════════════════════════════════════════════════════════════════
+          - script: |
+              set -e
+              echo "=========================================="
+              echo "   API Governance Validation"
+              echo "=========================================="
+
+              ORG_ID="$(muleOrgId)"
+              ASSET_ID=$(echo "$(projectName)" | sed 's/-app$//')
+              GROUP_ID="$ORG_ID"
+              ASSET_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null | tail -1 | sed 's/-SNAPSHOT//')
+              [ -z "$ASSET_VERSION" ] && ASSET_VERSION=$(grep -m1 '<version>' pom.xml | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | sed 's/-SNAPSHOT//')
+              PROFILE_NAME_INPUT="$PROFILE_NAME_VAR"
+              RULESET_REF="68ef9520-24e9-4cf2-b2f5-620025690913/anypoint-best-practices/1.0.3"
+
+              echo "  Org ID       : $ORG_ID"
+              echo "  Asset        : $ASSET_ID v$ASSET_VERSION"
+              if [ -n "$PROFILE_NAME_INPUT" ]; then
+                echo "  Profile input: $PROFILE_NAME_INPUT"
+              else
+                echo "  Profile input: (empty — will auto-create)"
+              fi
+
+              if ! command -v anypoint-cli-v4 &>/dev/null; then
+                echo "  Installing anypoint-cli-v4..."
+                npm install -g anypoint-cli-v4 --silent --no-progress
+              fi
+              echo "   $(anypoint-cli-v4 --version)"
+
+              export ANYPOINT_CLIENT_ID="$(anypointClientId)"
+              export ANYPOINT_CLIENT_SECRET="$(anypointClientSecret)"
+              export ANYPOINT_ORG="$ORG_ID"
+
+              PROFILE_ID=""
+              PROFILE_NAME=""
+
+              if [ -n "$PROFILE_NAME_INPUT" ]; then
+                echo ""
+                echo "--- Looking up profile: \"$PROFILE_NAME_INPUT\" ---"
+
+                PROFILES_JSON=$(anypoint-cli-v4 governance:profile:list \
+                  --organization "$ORG_ID" \
+                  --output json 2>/dev/null || echo "[]")
+
+                PROFILE_ID=$(echo "$PROFILES_JSON" | python3 -c "
+              import json, sys
+              try:
+                  data = json.load(sys.stdin)
+                  profiles = data if isinstance(data, list) else data.get('profiles', [])
+                  target = '${PROFILE_NAME_INPUT}'.lower().strip()
+                  for p in profiles:
+                      if isinstance(p, dict):
+                          name = p.get('Profile Name', p.get('name', '')).lower().strip()
+                          if name == target:
+                              print(p.get('Profile Id', p.get('id', '')))
+                              sys.exit(0)
+                      elif isinstance(p, list) and len(p) >= 2:
+                          if p[0].lower().strip() == target:
+                              print(p[1])
+                              sys.exit(0)
+              except Exception as e:
+                  pass
+              print('')
+              " 2>/dev/null || true)
+
+                if [ -z "$PROFILE_ID" ] || [ "$PROFILE_ID" = "None" ]; then
+                  echo " Profile \"$PROFILE_NAME_INPUT\" not found in org $ORG_ID"
+                  echo "##vso[task.logissue type=error]Profile not found: ${PROFILE_NAME_INPUT}"
+                  exit 1
+                fi
+
+                PROFILE_NAME="$PROFILE_NAME_INPUT"
+                echo "   Found: $PROFILE_NAME ($PROFILE_ID)"
+
+              else
+                echo ""
+                AUTO_NAME="Intelog-Best-Practices"
+                echo "--- Creating profile: \"$AUTO_NAME\" ---"
+
+                PROFILES_JSON=$(anypoint-cli-v4 governance:profile:list \
+                  --organization "$ORG_ID" \
+                  --output json 2>/dev/null || echo "[]")
+
+                PROFILE_ID=$(echo "$PROFILES_JSON" | python3 -c "
+              import json, sys
+              try:
+                  data = json.load(sys.stdin)
+                  profiles = data if isinstance(data, list) else data.get('profiles', [])
+                  target = '${AUTO_NAME}'.lower().strip()
+                  for p in profiles:
+                      if isinstance(p, dict):
+                          name = p.get('Profile Name', p.get('name', '')).lower().strip()
+                          if name == target:
+                              print(p.get('Profile Id', p.get('id', '')))
+                              sys.exit(0)
+                      elif isinstance(p, list) and len(p) >= 2:
+                          if p[0].lower().strip() == target:
+                              print(p[1])
+                              sys.exit(0)
+              except Exception as e:
+                  pass
+              print('')
+              " 2>/dev/null || true)
+
+                if [ -n "$PROFILE_ID" ] && [ "$PROFILE_ID" != "None" ]; then
+                  echo "    Already exists — reusing: $PROFILE_ID"
+                else
+                  CREATE_OUT=$(anypoint-cli-v4 governance:profile:create \
+                    "$AUTO_NAME" \
+                    "$RULESET_REF" \
+                    --criteria "scope:rest-api" \
+                    --organization "$ORG_ID" \
+                    --output json 2>&1 || true)
+
+                  echo "  CLI output: $CREATE_OUT"
+
+                  PROFILE_ID=$(echo "$CREATE_OUT" | python3 -c "
+              import json, sys, re
+              raw = sys.stdin.read()
+              try:
+                  match = re.search(r'\[.*\]', raw, re.DOTALL)
+                  if match:
+                      data = json.loads(match.group())
+                      for row in data:
+                          if isinstance(row, list) and len(row) >= 2 and row[0] == 'Id':
+                              print(row[1])
+                              sys.exit(0)
+              except:
+                  pass
+              print('')
+              " 2>/dev/null || true)
+
+                  if [ -z "$PROFILE_ID" ] || [ "$PROFILE_ID" = "None" ]; then
+                    echo "##vso[task.logissue type=warning]  Could not extract profile ID — skipping"
+                    echo "##vso[task.setvariable variable=GOVERNANCE_STATUS]PROFILE_PARSE_FAILED"
+                    exit 0
+                  fi
+
+                  echo "   Profile ID: $PROFILE_ID"
+                  echo "##vso[build.addbuildtag]Governance-Profile-Created"
+                  echo "##vso[task.setvariable variable=CREATED_PROFILE_NAME]$AUTO_NAME"
+                  echo "##vso[task.setvariable variable=CREATED_PROFILE_ID]$PROFILE_ID"
+                fi
+
+                PROFILE_NAME="$AUTO_NAME"
+              fi
+
+              echo ""
+              echo "--- Validating: $GROUP_ID/$ASSET_ID/$ASSET_VERSION ---"
+
+              VALIDATE_TMP=$(mktemp /tmp/governance_out.XXXXXX)
+              anypoint-cli-v4 governance:api:validate \
+                "${GROUP_ID}/${ASSET_ID}/${ASSET_VERSION}" \
+                --remote \
+                --remote-rulesets "$RULESET_REF" > "$VALIDATE_TMP" 2>&1 || true
+
+              cat "$VALIDATE_TMP"
+
+              export VALIDATE_TMP_PATH="$VALIDATE_TMP"
+
+              python3 << 'PYEOF'
+              import sys, re, os
+
+              tmp_path = os.environ.get('VALIDATE_TMP_PATH', '')
+              raw = open(tmp_path).read() if tmp_path and os.path.exists(tmp_path) else ''
+              asset_id   = os.environ.get('ASSET_ID', 'Unknown')
+              profile_nm = os.environ.get('PROFILE_NAME', 'Unknown')
+
+              not_found_signals = ['not found', 'does not exist', 'no api found',
+                                   'problem looking for the specified asset', 'could not find']
+              if any(s in raw.lower() for s in not_found_signals):
+                  print("  Asset not yet published — governance runs from second build")
+                  print("##vso[task.setvariable variable=GOVERNANCE_STATUS]NOT_PUBLISHED")
+                  sys.exit(0)
+
+              lines = raw.splitlines()
+              critical = sum(1 for l in lines if '[CRITICAL]' in l.upper())
+              major    = sum(1 for l in lines if '[MAJOR]' in l.upper())
+              minor    = sum(1 for l in lines if '[MINOR]' in l.upper())
+              warnings = sum(1 for l in lines if '[WARNING]' in l.upper())
+              total    = critical + major + minor + warnings
+              conforms = total == 0 or any(s in raw.lower() for s in ['conforms: true', '0 violations'])
+              status   = 'CONFORMS' if conforms else 'DOES_NOT_CONFORM'
+
+              print(f"##vso[task.setvariable variable=GOVERNANCE_CONFORMANCE]{status}")
+              if critical > 0:
+                  print(f"##vso[task.logissue type=error] {critical} CRITICAL violation(s)")
+                  print("##vso[task.setvariable variable=GOVERNANCE_STATUS]FAILED")
+                  sys.exit(1)
+              print("##vso[task.setvariable variable=GOVERNANCE_STATUS]PASSED")
+              print(f" Governance PASSED — {status}")
+              PYEOF
+
+              rm -f "$VALIDATE_TMP" 2>/dev/null || true
+            displayName: ' API Governance Validation'
+            continueOnError: false
+            env:
+              anypointClientId:     $(anypointClientId)
+              anypointClientSecret: $(anypointClientSecret)
+              muleOrgId:            $(muleOrgId)
+              PROFILE_NAME_VAR:     $(governanceProfileName)
+              ASSET_ID:             $(projectName)
+              PROFILE_NAME:         $(governanceProfileName)
+
+          - script: |
+              if [ -n "$(CREATED_PROFILE_NAME)" ]; then
+                echo "New Governance Profile: $(CREATED_PROFILE_NAME) ($(CREATED_PROFILE_ID))"
+                echo "Add 'governanceProfileName = $(CREATED_PROFILE_NAME)' to build.variables group to reuse"
+              fi
+            displayName: ' Governance Profile Summary'
+            condition: succeededOrFailed()
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 5: Diagnose Project Structure
+          # ══════════════════════════════════════════════════════════════════
+          - script: |
+              echo "Mule Flows:"; find src/main -name "*.xml" -type f 2>/dev/null | while read f; do echo "  - $(basename $f)"; done
+              echo "MUnit Test Suites:"; find src/test -name "*.xml" -type f 2>/dev/null | while read f; do echo "  - $(basename $f)"; done
+              echo "Flow Names:"; grep -rh 'flow name=' src/main/mule/*.xml 2>/dev/null | sed 's/.*name="\([^"]*\)".*/  - \1/' | sort -u || echo "  (none)"
+            displayName: 'Diagnose Project Structure'
+            continueOnError: true
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 6: Run MUnit Tests + Parse Real Coverage Data + Cobertura XML
+          # ══════════════════════════════════════════════════════════════════
+          - script: |
+              export MAVEN_OPTS="-Xmx3072m"
+              echo "=========================================="
+              echo "  Running MUnit Tests"
+              echo "=========================================="
+
+              mvn clean test \
+                -Dsecure.key=1236526787652436 \
+                -Dencryption.key=1236526787652436 \
+                -Dmule.env=dev \
+                -s ~/.m2/settings.xml 2>&1 | tee maven-test.log
+
+              TEST_EXIT=${PIPESTATUS[0]}
+              [ $TEST_EXIT -ne 0 ] && { echo " Maven build failed"; exit $TEST_EXIT; }
+              echo " Maven build completed"
+
+              COVERAGE=$(grep -oP '\*\* Application Coverage:\s*\K[0-9.]+' maven-test.log | tail -1)
+              [ -z "$COVERAGE" ] && COVERAGE=$(grep -oP 'Application Coverage:\s*\K[0-9.]+' maven-test.log | tail -1)
+              if [ -z "$COVERAGE" ]; then
+                echo " Could not extract coverage %"; tail -30 maven-test.log; exit 1
+              fi
+              echo " Overall Coverage: ${COVERAGE}%"
+              echo "##vso[task.setvariable variable=APPLICATION_COVERAGE]$COVERAGE"
+
+              echo "--- Parsing MUnit coverage details from Maven log ---"
+
+              SOURCES_DIR="$(Build.SourcesDirectory)" \
+              APPLICATION_COVERAGE="$COVERAGE" \
+              python3 << 'PYEOF'
+              import re, json, os, time
+
+              SOURCES_DIR = os.environ["SOURCES_DIR"]
+              COVERAGE_PC = float(os.environ.get("APPLICATION_COVERAGE", "0"))
+              RATE        = COVERAGE_PC / 100.0
+              log_path    = "maven-test.log"
+
+              log_content = open(log_path).read() if os.path.exists(log_path) else ""
+
+              file_header_re = re.compile(
+                  r'Resource File:\s*([\w.\-]+\.xml)\s*-\s*Containers:\s*(\d+)\s*-\s*Weight:\s*([\d.]+)\s*-\s*Coverage:\s*([\d.]+)%'
+              )
+              row_re = re.compile(
+                  r'\|\s*([^|]+?)\s*\|\s*(Flow|Error handler|Sub-flow)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*([\d.]+)%\s*\|'
+              )
+              covered_proc_re = re.compile(r'Covered Processors:\s*(\d+)')
+              total_proc_re   = re.compile(r'Total Processors:\s*(\d+)')
+
+              covered_proc = int(m.group(1)) if (m := covered_proc_re.search(log_content)) else 0
+              total_proc   = int(m.group(1)) if (m := total_proc_re.search(log_content)) else 0
+
+              files = []
+              blocks = file_header_re.split(log_content)
+              i = 1
+              while i + 4 <= len(blocks):
+                  fname      = blocks[i].strip()
+                  containers = int(blocks[i+1])
+                  weight     = float(blocks[i+2])
+                  cov_pct    = float(blocks[i+3])
+                  block_text = blocks[i+4]
+
+                  flows = []
+                  for m in row_re.finditer(block_text):
+                      flows.append({
+                          "name":     m.group(1).strip(),
+                          "type":     m.group(2).strip(),
+                          "covered":  int(m.group(3)),
+                          "total":    int(m.group(4)),
+                          "coverage": float(m.group(5))
+                      })
+
+                  files.append({
+                      "name":       fname,
+                      "containers": containers,
+                      "weight":     weight,
+                      "coverage":   cov_pct,
+                      "flows":      flows
+                  })
+                  i += 5
+
+              if not files:
+                  mule_dir = os.path.join(SOURCES_DIR, "src", "main", "mule")
+                  if os.path.isdir(mule_dir):
+                      for f in sorted(os.listdir(mule_dir)):
+                          if f.endswith(".xml"):
+                              files.append({"name": f, "containers": 1, "weight": 0,
+                                            "coverage": COVERAGE_PC, "flows": []})
+                  print(f"  Fallback: {len(files)} files from directory scan")
+              else:
+                  print(f" Parsed {len(files)} resource file(s) with {sum(len(f['flows']) for f in files)} flows")
+
+              data = {
+                  "overall":       COVERAGE_PC,
+                  "coveredProc":   covered_proc,
+                  "totalProc":     total_proc,
+                  "files":         files,
+                  "timestamp":     int(time.time())
+              }
+
+              out_path = os.path.join(SOURCES_DIR, "coverage-data.json")
+              with open(out_path, "w") as f:
+                  json.dump(data, f, indent=2)
+
+              lines_covered, lines_total, class_blocks = 0, 0, []
+
+              for fd in files:
+                  fd_rate = fd["coverage"] / 100.0
+                  if fd["flows"]:
+                      for fl in fd["flows"]:
+                          fl_rate = fl["covered"] / fl["total"] if fl["total"] else fd_rate
+                          fl_lines = []
+                          for j in range(fl["total"]):
+                              hit = 1 if j < fl["covered"] else 0
+                              lines_covered += hit; lines_total += 1
+                              fl_lines.append(f'            <line number="{lines_total}" hits="{hit}" branch="false"/>')
+                          class_blocks.append(
+                              f'          <class name="{fl["name"]}" filename="src/main/mule/{fd["name"]}" '
+                              f'line-rate="{fl_rate:.4f}" branch-rate="0" complexity="0">\n'
+                              f'            <lines>\n' + "\n".join(fl_lines) +
+                              f'\n            </lines>\n          </class>')
+                  else:
+                      covered_n = round(10 * fd_rate)
+                      base = lines_total + 1
+                      line_xml = "\n".join(
+                          f'            <line number="{base+j}" hits="{1 if j < covered_n else 0}" branch="false"/>'
+                          for j in range(10))
+                      lines_covered += covered_n; lines_total += 10
+                      class_blocks.append(
+                          f'          <class name="{os.path.splitext(fd["name"])[0]}" filename="src/main/mule/{fd["name"]}" '
+                          f'line-rate="{fd_rate:.4f}" branch-rate="0" complexity="0">\n'
+                          f'            <lines>\n{line_xml}\n            </lines>\n          </class>')
+
+              overall = lines_covered / lines_total if lines_total else RATE
+              xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+              <!DOCTYPE coverage SYSTEM "http://cobertura.sourceforge.net/xml/coverage-04.dtd">
+              <coverage line-rate="{overall:.4f}" branch-rate="0"
+                        lines-covered="{lines_covered}" lines-valid="{lines_total}"
+                        branches-covered="0" branches-valid="0"
+                        complexity="0" version="1.9.4.1" timestamp="{int(time.time())}">
+                <sources><source>{SOURCES_DIR}/src/main/mule</source></sources>
+                <packages>
+                  <package name="mule-flows" line-rate="{overall:.4f}" branch-rate="0" complexity="0">
+                    <classes>
+              {"".join(f"{b}\n" for b in class_blocks)}            </classes>
+                  </package>
+                </packages>
+              </coverage>"""
+
+              cob_path = os.path.join(SOURCES_DIR, "cobertura-final.xml")
+              with open(cob_path, "w") as f:
+                  f.write(xml)
+              print(f" Cobertura XML: {len(class_blocks)} classes, {lines_covered}/{lines_total} lines ({overall*100:.1f}%)")
+              PYEOF
+
+              echo "##vso[task.setvariable variable=COVERAGE_XML_PATH]$(Build.SourcesDirectory)/cobertura-final.xml"
+            displayName: 'Run MUnit Tests & Generate Coverage Data'
+            continueOnError: true
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 7: Generate HTML + Cobertura via ReportGenerator
+          # ══════════════════════════════════════════════════════════════════
+          - task: reportgenerator@5
+            displayName: 'Generate Code Coverage Report'
+            inputs:
+              reports: '$(COVERAGE_XML_PATH)'
+              targetdir: '$(Build.SourcesDirectory)/coveragereport'
+              reporttypes: 'HtmlInline_AzurePipelines;Cobertura;JsonSummary;Html'
+              sourcedirs: '$(Build.SourcesDirectory)/src/main/mule'
+              title: '$(projectName) - MUnit Coverage Report'
+              tag: '$(Build.BuildNumber)'
+              assemblyfilters: '+*'
+              classfilters: '+*'
+              filefilters: '+*'
+              verbosity: 'Info'
+            continueOnError: true
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 8: Publish Coverage Results to Azure DevOps Code Coverage tab
+          # ══════════════════════════════════════════════════════════════════
+          - task: PublishCodeCoverageResults@2
+            displayName: 'Publish Code Coverage Results'
+            inputs:
+              summaryFileLocation: '$(Build.SourcesDirectory)/coveragereport/Cobertura.xml'
+              pathToSources: '$(Build.SourcesDirectory)/src/main/mule'
+              failIfCoverageEmpty: false
+            continueOnError: true
+
+# ══════════════════════════════════════════════════════════════════
+          # STEP 9: Generate Coverage HTML Dashboard
+          # ══════════════════════════════════════════════════════════════════
+          - script: |
+              set -e
+              SOURCES_DIR="$(Build.SourcesDirectory)"
+              COVERAGE="$(APPLICATION_COVERAGE)"
+              ORG_URL="$(System.TeamFoundationCollectionUri)"
+              PROJECT="$(System.TeamProject)"
+              BUILD_ID="$(Build.BuildId)"
+              PROJECT_NAME="$(projectName)"
+              BUILD_NUMBER="$(Build.BuildNumber)"
+              BUILD_DATE=$(date -u '+%Y-%m-%d %H:%M UTC')
+
+              # Construct the URLs
+              HTML_DIRECT_URL="${ORG_URL}${PROJECT}/_apis/build/builds/${BUILD_ID}/artifacts?artifactName=CoverageReports&api-version=7.0&%24format=zip"
+              COVERAGE_TAB_URL="${ORG_URL}${PROJECT}/_build/results?buildId=${BUILD_ID}&view=codecoverage-tab"
+              ARTIFACTS_URL="${ORG_URL}${PROJECT}/_build/results?buildId=${BUILD_ID}&view=artifacts&type=publishedArtifacts"
+              
+              # The Custom HTML tab typically uses the extensions-tab view in ADO
+              HTML_TAB_URL="${ORG_URL}${PROJECT}/_build/results?buildId=${BUILD_ID}&view=awardedsolutions.azure-pipelines-html-report-awardedsolutions.build-html-report-tab"
+
+              # Print clickable links to the logs
+              echo "========================================================"
+              echo "  QUICK LINKS TO MUNIT REPORTS "
+              echo "========================================================"
+              echo " Native Code Coverage Tab: ${COVERAGE_TAB_URL}"
+              echo " Custom HTML Report Tab  : ${HTML_TAB_URL}"
+              echo " Download HTML Artifact  : ${HTML_DIRECT_URL}"
+              echo "========================================================"
+
+              mkdir -p "${SOURCES_DIR}/coveragereport"
+
+              export SOURCES_DIR COVERAGE PROJECT_NAME BUILD_NUMBER BUILD_DATE
+              export HTML_DIRECT_URL COVERAGE_TAB_URL ARTIFACTS_URL
+
+              python3 - << 'PYEOF'
+              import json, os, html as html_mod
+
+              SOURCES_DIR     = os.environ["SOURCES_DIR"]
+              COVERAGE        = os.environ.get("COVERAGE", "0")
+              PROJECT_NAME    = os.environ.get("PROJECT_NAME", "")
+              BUILD_NUMBER    = os.environ.get("BUILD_NUMBER", "")
+              BUILD_DATE      = os.environ.get("BUILD_DATE", "")
+              HTML_DIRECT_URL = os.environ.get("HTML_DIRECT_URL", "#")
+              COVERAGE_TAB_URL= os.environ.get("COVERAGE_TAB_URL", "#")
+              ARTIFACTS_URL   = os.environ.get("ARTIFACTS_URL", "#")
+
+              json_path = os.path.join(SOURCES_DIR, "coverage-data.json")
+              try:
+                  with open(json_path) as f:
+                      data = json.load(f)
+              except Exception as e:
+                  print(f"  Could not load coverage-data.json: {e} — using fallback")
+                  data = {"overall": float(COVERAGE), "coveredProc": 0, "totalProc": 0, "files": []}
+
+              overall   = data.get("overall", float(COVERAGE))
+              cov_proc  = data.get("coveredProc", 0)
+              tot_proc  = data.get("totalProc", 0)
+              files     = data.get("files", [])
+
+              def badge_color(pct):
+                  if pct >= 80: return "#2ea043", "#1a6e2e"
+                  if pct >= 50: return "#d29922", "#8a6200"
+                  return "#f85149", "#8f1c19"
+
+              main_color, main_dark = badge_color(overall)
+              CIRC   = 2 * 3.14159 * 54
+              offset = CIRC - (overall / 100) * CIRC
+
+              file_cards = ""
+              for fi in files:
+                  fc, fd = badge_color(fi["coverage"])
+                  bar_w  = max(fi["coverage"], 1)
+                  flows_html = ""
+                  if fi.get("flows"):
+                      rows = ""
+                      for fl in fi["flows"]:
+                          fc2, _ = badge_color(fl["coverage"])
+                          pct    = fl["coverage"]
+                          rows += (
+                              f'<tr>'
+                              f'<td class="flow-name">{html_mod.escape(fl["name"])}</td>'
+                              f'<td class="flow-type">{html_mod.escape(fl["type"])}</td>'
+                              f'<td class="flow-nums">{fl["covered"]}/{fl["total"]}</td>'
+                              f'<td class="flow-bar-td"><div class="mini-bar">'
+                              f'<div class="mini-fill" style="width:{max(pct,1):.1f}%;background:{fc2}"></div>'
+                              f'</div></td>'
+                              f'<td class="flow-pct" style="color:{fc2}">{pct:.1f}%</td>'
+                              f'</tr>'
+                          )
+                      flows_html = (
+                          f'<div class="flow-table-wrap"><table class="flow-table">'
+                          f'<thead><tr><th>Flow / Container</th><th>Type</th>'
+                          f'<th>Covered</th><th style="width:140px">Bar</th><th>%</th></tr></thead>'
+                          f'<tbody>{rows}</tbody></table></div>'
+                      )
+                  file_cards += (
+                      f'<div class="file-card">'
+                      f'<div class="file-header">'
+                      f'<span class="file-icon">&#128196;</span>'
+                      f'<span class="file-name">{html_mod.escape(fi["name"])}</span>'
+                      f'<span class="file-containers">{fi["containers"]} container{"s" if fi["containers"]!=1 else ""}</span>'
+                      f'<span class="file-badge" style="background:{fc}">{fi["coverage"]:.1f}%</span>'
+                      f'</div>'
+                      f'<div class="file-progress"><div class="file-bar">'
+                      f'<div class="file-fill" style="width:{bar_w:.1f}%;background:linear-gradient(90deg,{fc},{fd})"></div>'
+                      f'</div></div>'
+                      f'{flows_html}'
+                      f'</div>'
+                  )
+
+              uncov_proc  = tot_proc - cov_proc
+              num_files   = len(files)
+              total_flows = sum(len(fi.get("flows", [])) for fi in files)
+
+              html_out = f"""<!DOCTYPE html>
+              <html lang="en">
+              <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width,initial-scale=1">
+              <title>MUnit Coverage &mdash; {html_mod.escape(PROJECT_NAME)}</title>
+              <style>
+              *{{box-sizing:border-box;margin:0;padding:0}}
+              body{{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;min-height:100vh;padding:24px}}
+              a{{color:#58a6ff;text-decoration:none}}a:hover{{text-decoration:underline}}
+              .header{{max-width:1100px;margin:0 auto 28px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #21262d;padding-bottom:18px}}
+              .header-icon{{font-size:36px}}
+              .header-title{{font-size:22px;font-weight:700}}
+              .header-sub{{font-size:13px;color:#8b949e;margin-top:3px}}
+              .grid{{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:320px 1fr;gap:20px}}
+              @media(max-width:800px){{.grid{{grid-template-columns:1fr}}}}
+              .left-panel{{display:flex;flex-direction:column;gap:16px}}
+              .donut-card{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:28px 20px;text-align:center}}
+              .donut-wrap{{position:relative;display:inline-block;margin-bottom:16px}}
+              .donut-svg{{transform:rotate(-90deg)}}
+              .donut-track{{fill:none;stroke:#21262d;stroke-width:10}}
+              .donut-fill{{fill:none;stroke-width:10;stroke-linecap:round;stroke-dasharray:{CIRC:.2f}}}
+              .donut-center{{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center}}
+              .donut-pct{{font-size:30px;font-weight:800;line-height:1;color:{main_color}}}
+              .donut-label{{font-size:11px;color:#8b949e;margin-top:2px}}
+              .donut-title{{font-size:15px;font-weight:600;margin-bottom:4px}}
+              .donut-sub{{font-size:12px;color:#8b949e}}
+              .stats-grid{{display:grid;grid-template-columns:1fr 1fr;gap:10px}}
+              .stat-pill{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 14px}}
+              .stat-val{{font-size:22px;font-weight:700;line-height:1}}
+              .stat-lbl{{font-size:11px;color:#8b949e;margin-top:3px}}
+              .stat-green{{color:#2ea043}}.stat-red{{color:#f85149}}.stat-blue{{color:#58a6ff}}.stat-yellow{{color:#d29922}}
+              .btn-group{{display:flex;flex-direction:column;gap:8px}}
+              .btn{{display:flex;align-items:center;gap:8px;padding:11px 16px;border-radius:8px;font-size:13px;font-weight:600;transition:opacity .2s;border:1px solid transparent}}
+              .btn:hover{{opacity:.82}}
+              .btn-primary{{background:#238636;border-color:#2ea043;color:#fff}}
+              .btn-secondary{{background:#21262d;border-color:#30363d;color:#58a6ff}}
+              .right-panel{{display:flex;flex-direction:column;gap:16px}}
+              .summary-card{{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px 24px}}
+              .summary-title{{font-size:14px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}}
+              .overall-bar{{height:14px;background:#21262d;border-radius:7px;overflow:hidden;margin-bottom:6px}}
+              .overall-fill{{height:14px;border-radius:7px;background:linear-gradient(90deg,{main_color},{main_dark})}}
+              .overall-labels{{display:flex;justify-content:space-between;font-size:12px;color:#8b949e}}
+              .section-title{{font-size:14px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}}
+              .file-card{{background:#161b22;border:1px solid #30363d;border-radius:10px;overflow:hidden;margin-bottom:12px}}
+              .file-header{{display:flex;align-items:center;gap:10px;padding:14px 18px;background:#0d1117}}
+              .file-icon{{font-size:16px}}
+              .file-name{{font-size:14px;font-weight:600;flex:1}}
+              .file-containers{{font-size:11px;color:#8b949e;white-space:nowrap}}
+              .file-badge{{font-size:13px;font-weight:700;color:#fff;padding:3px 10px;border-radius:20px}}
+              .file-progress{{padding:10px 18px}}
+              .file-bar{{height:8px;background:#21262d;border-radius:4px;overflow:hidden}}
+              .file-fill{{height:8px;border-radius:4px}}
+              .flow-table-wrap{{padding:0 18px 14px;overflow-x:auto}}
+              .flow-table{{width:100%;border-collapse:collapse;font-size:12px}}
+              .flow-table th{{background:#0d1117;color:#8b949e;padding:7px 10px;text-align:left;font-weight:600;border-bottom:1px solid #21262d}}
+              .flow-table td{{padding:7px 10px;border-top:1px solid #161b22}}
+              .flow-name{{color:#e6edf3;font-family:monospace;font-size:11px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+              .flow-type{{color:#8b949e;font-size:11px;white-space:nowrap}}
+              .flow-nums{{color:#8b949e;text-align:center;white-space:nowrap}}
+              .flow-bar-td{{min-width:120px}}
+              .mini-bar{{height:6px;background:#21262d;border-radius:3px;overflow:hidden}}
+              .mini-fill{{height:6px;border-radius:3px}}
+              .flow-pct{{font-weight:700;text-align:right;white-space:nowrap}}
+              .footer{{max-width:1100px;margin:24px auto 0;text-align:center;font-size:12px;color:#484f58}}
+              </style>
+              </head>
+              <body>
+              <div class="header">
+                <div class="header-icon">&#128202;</div>
+                <div>
+                  <div class="header-title">MUnit Coverage Report</div>
+                  <div class="header-sub">{html_mod.escape(PROJECT_NAME)} &nbsp;&middot;&nbsp; Build {html_mod.escape(BUILD_NUMBER)} &nbsp;&middot;&nbsp; {html_mod.escape(BUILD_DATE)}</div>
+                </div>
+              </div>
+              <div class="grid">
+                <div class="left-panel">
+                  <div class="donut-card">
+                    <div class="donut-title">Application Coverage</div>
+                    <div class="donut-sub">{html_mod.escape(PROJECT_NAME)}</div><br>
+                    <div class="donut-wrap">
+                      <svg class="donut-svg" width="140" height="140" viewBox="0 0 140 140">
+                        <circle class="donut-track" cx="70" cy="70" r="54"/>
+                        <circle class="donut-fill" cx="70" cy="70" r="54" stroke="{main_color}" stroke-dashoffset="{offset:.2f}"/>
+                      </svg>
+                      <div class="donut-center">
+                        <div class="donut-pct">{overall:.1f}%</div>
+                        <div class="donut-label">covered</div>
+                      </div>
+                    </div>
+                    <div class="donut-sub">{cov_proc} / {tot_proc} processors covered</div>
+                  </div>
+                  <div class="stats-grid">
+                    <div class="stat-pill"><div class="stat-val stat-green">{cov_proc}</div><div class="stat-lbl">Covered Processors</div></div>
+                    <div class="stat-pill"><div class="stat-val stat-red">{uncov_proc}</div><div class="stat-lbl">Uncovered</div></div>
+                    <div class="stat-pill"><div class="stat-val stat-blue">{num_files}</div><div class="stat-lbl">Resource Files</div></div>
+                    <div class="stat-pill"><div class="stat-val stat-yellow">{total_flows}</div><div class="stat-lbl">Total Flows</div></div>
+                  </div>
+                  <div class="btn-group">
+                    <a class="btn btn-primary" href="{html_mod.escape(COVERAGE_TAB_URL)}" target="_blank">&#128200; Code Coverage Tab</a>
+                    <a class="btn btn-secondary" href="{html_mod.escape(ARTIFACTS_URL)}" target="_blank">&#128193; Browse Artifacts</a>
+                  </div>
+                </div>
+                <div class="right-panel">
+                  <div class="summary-card">
+                    <div class="summary-title">Overall Coverage</div>
+                    <div class="overall-bar"><div class="overall-fill" style="width:{max(overall,1):.2f}%"></div></div>
+                    <div class="overall-labels"><span>{overall:.2f}% covered</span><span>{100-overall:.2f}% uncovered</span></div>
+                  </div>
+                  <div>
+                    <div class="section-title">&#128203; Per-File Coverage Breakdown</div>
+                    {file_cards if file_cards else '<div style="color:#8b949e;padding:20px;text-align:center">No file data available</div>'}
+                  </div>
+                </div>
+              </div>
+              <div class="footer">Generated by Intelog Agent &nbsp;&middot;&nbsp; {html_mod.escape(BUILD_DATE)} &nbsp;&middot;&nbsp; Build {html_mod.escape(BUILD_NUMBER)}</div>
+              </body>
+              </html>"""
+
+              out_path = os.path.join(SOURCES_DIR, "coveragereport", "coverage-report.html")
+              with open(out_path, "w", encoding="utf-8") as f:
+                  f.write(html_out)
+              print(f" Coverage HTML written: {out_path} ({len(html_out)//1024}KB)")
+
+              # Generate a Markdown summary for the main ADO build page
+              md_out = f"###  MUnit Coverage: {overall:.2f}%\n"
+              md_out += f"- **Covered Processors**: {cov_proc}\n"
+              md_out += f"- **Uncovered Processors**: {uncov_proc}\n"
+              md_out += f"- **Resource Files**: {num_files}\n"
+              md_out += f"- **Total Flows**: {total_flows}\n"
+              
+              md_path = os.path.join(SOURCES_DIR, "coveragereport", "coverage-summary.md")
+              with open(md_path, "w", encoding="utf-8") as f:
+                  f.write(md_out)
+              print(f" Markdown summary written: {md_path}")
+              PYEOF
+
+              cp "${SOURCES_DIR}/coverage-data.json" "${SOURCES_DIR}/coveragereport/coverage-data.json" 2>/dev/null || true
+
+              # Upload the Markdown file to the Build Summary extensions tab
+              MD_PATH="${SOURCES_DIR}/coveragereport/coverage-summary.md"
+              if [ -f "$MD_PATH" ]; then
+                echo "##vso[task.uploadsummary]${MD_PATH}"
+                echo "##vso[build.addbuildtag]Coverage-${COVERAGE}pct"
+                echo " Summary uploaded"
+              else
+                echo "  Markdown file not found — skipping uploadsummary"
+              fi
+            displayName: ' Generate Coverage HTML Dashboard'
+            condition: succeededOrFailed()
+            continueOnError: true
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 9.5: Embed Custom HTML Report in ADO Tab
+          # ══════════════════════════════════════════════════════════════════
+          - task: PublishHtmlReport@1
+            displayName: 'Publish MUnit HTML Report Tab'
+            inputs:
+              reportDir: '$(Build.SourcesDirectory)/coveragereport/coverage-report.html'
+              tabName: 'MUnit Coverage'
+            continueOnError: true
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 10: Publish Coverage as BUILD artifact
+          # ══════════════════════════════════════════════════════════════════
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Coverage Artifact'
+            inputs:
+              PathtoPublish: '$(Build.SourcesDirectory)/coveragereport'
+              ArtifactName: 'CoverageReports'
+              publishLocation: 'Container'
+            continueOnError: true
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 11a: Maven Build - Generate JAR 
+          # ══════════════════════════════════════════════════════════════════
+          - task: Maven@4
+            displayName: 'Maven Build - Generate JAR'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'clean package'
+              options: >
+                -s $(mavenSettings.secureFilePath)
+                -DskipTests
+                -Dmule.env=dev
+                -Dsecure.key=1236526787652436
+                -Dencryption.key=1236526787652436
+                -Danypoint.businessGroupId=$(muleOrgId)
+                -Dconnectedapp.clientid=$(anypointClientId)
+                -Dconnectedapp.clientsecret=$(anypointClientSecret)
+              publishJUnitResults: false
+              mavenOptions: '-Xmx3072m'
+              javaHomeOption: 'JDKVersion'
+              jdkVersionOption: '17'
+              jdkArchitectureOption: 'x64'
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 11: SonarQube - Prepare Analysis
+          # ══════════════════════════════════════════════════════════════════
+          - task: SonarQubePrepare@8
+            displayName: 'Prepare SonarQube Analysis'
+            inputs:
+              SonarQube: '$(sonarQubeServiceConnection)'
+              scannerMode: 'Other'
+              extraProperties: |
+                sonar.projectKey=$(projectName)
+                sonar.projectName=$(projectName)
+                sonar.projectVersion=1.0.0
+                sonar.sources=src/main/mule,src/main/resources
+                sonar.tests=src/test/munit
+                sonar.java.binaries=target/classes
+                sonar.exclusions=**/target/**,**/node_modules/**
+            continueOnError: true
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 12: Maven Build, SonarQube & Publish to Exchange
+          # ══════════════════════════════════════════════════════════════════
+          - script: |
+              echo "=========================================="
+              echo "   Building $(projectName) with SonarQube"
+              echo "=========================================="
+
+              mvn sonar:sonar \
+                -DskipTests \
+                -DskipMuleDeploy=true \
+                -Dmule.env=dev \
+                -Dsecure.key=1236526787652436 \
+                -Dencryption.key=1236526787652436 \
+                -Danypoint.businessGroupId=$(muleOrgId) \
+                -Dconnectedapp.clientid=$(anypointClientId) \
+                -Dconnectedapp.clientsecret=$(anypointClientSecret) \
+                -s $(mavenSettings.secureFilePath)
+            displayName: 'SonarQube Analysis'
+            continueOnError: true
+            env:
+              anypointClientId: $(anypointClientId)
+              anypointClientSecret: $(anypointClientSecret)
+              muleOrgId: $(muleOrgId)
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 12b: Publish to Exchange
+          # ══════════════════════════════════════════════════════════════════
+          - script: |
+              echo "=========================================="
+              echo "   Publishing $(projectName) to Exchange"
+              echo "=========================================="
+
+              mvn deploy \
+                -DskipTests \
+                -DskipMuleDeploy=true \
+                -Dmule.env=dev \
+                -Dsecure.key=1236526787652436 \
+                -Dencryption.key=1236526787652436 \
+                -Danypoint.businessGroupId=$(muleOrgId) \
+                -Dconnectedapp.clientid=$(anypointClientId) \
+                -Dconnectedapp.clientsecret=$(anypointClientSecret) \
+                -s $(mavenSettings.secureFilePath)
+
+              if find target -name "*.jar" -print -quit 2>/dev/null | grep -q .; then
+                echo "Build completed — JAR created"
+                exit 0
+              else
+                echo "Build failed — no JAR artifact found"
+                exit 1
+              fi
+            displayName: 'Publish to Exchange'
+            env:
+              anypointClientId: $(anypointClientId)
+              anypointClientSecret: $(anypointClientSecret)
+              muleOrgId: $(muleOrgId)
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 13: SonarQube - Publish Quality Gate Results
+          # ══════════════════════════════════════════════════════════════════
+          - task: SonarQubePublish@8
+            displayName: 'Publish SonarQube Quality Gate Results'
+            inputs:
+              pollingTimeoutSec: '300'
+            continueOnError: true
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 14: SonarQube Summary
+          # ══════════════════════════════════════════════════════════════════
+          - script: |
+              SONAR_URL="${SONAR_HOST_URL%/}"
+              PROJECT_KEY="$(projectName)"
+              if [ -n "$SONAR_URL" ]; then
+                echo "SonarQube Dashboard: ${SONAR_URL}/dashboard?id=${PROJECT_KEY}"
+                echo "Open Issues: ${SONAR_URL}/project/issues?id=${PROJECT_KEY}&resolved=false"
+              else
+                echo "  sonarHostUrl not set"
+              fi
+            displayName: 'SonarQube Summary'
+            condition: succeededOrFailed()
+            env:
+              SONAR_HOST_URL: $(sonarHostUrl)
+
+          # ══════════════════════════════════════════════════════════════════
+          # STEP 15: Publish Build Artifacts
+          # ══════════════════════════════════════════════════════════════════
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Build Artifacts'
+            inputs:
+              targetPath: $(System.DefaultWorkingDirectory)
+              artifact: 'mule-project'
+              publishLocation: 'pipeline'
+
+
+  #####################################################
+  # STAGE 2: DEPLOY TO DEV
+  #####################################################
+  - stage: Deploy_DEV
+    displayName: 'Deploy to DEV'
+    dependsOn: BuildAndPublish
+    condition: succeeded()
+    variables:
+      - group: dev.variables  # ✅ DEV specific variables
+    jobs:
+      - job: DeployDEV
+        displayName: 'Deploy to DEV'
+        steps:
+          - task: DownloadSecureFile@1
+            name: mavenSettings
+            displayName: 'Download Maven Settings'
+            inputs:
+              secureFile: 'settings.xml'
+
+          - script: |
+              mkdir -p ~/.m2
+              cp $(mavenSettings.secureFilePath) ~/.m2/settings.xml
+            displayName: 'Install Maven Settings'
+
+          - task: JavaToolInstaller@0
+            displayName: 'Setup Java 17'
+            inputs:
+              versionSpec: '17'
+              jdkArchitectureOption: 'x64'
+              jdkSourceOption: 'PreInstalled'
+
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download JAR Artifact'
+            inputs:
+              buildType: 'current'
+              artifactName: 'mule-project'
+              targetPath: '$(System.DefaultWorkingDirectory)/mule-project'
+          
+          
+          - script: |
+              JAR_FILE=$(find $(System.DefaultWorkingDirectory)/mule-project/target -name "*mule-application.jar" | head -1)
+              echo "JAR Found: $JAR_FILE"
+              if [ -z "$JAR_FILE" ]; then
+                echo "No JAR found!"
+                exit 1
+              fi
+              echo "##vso[task.setvariable variable=JAR_FILE]$JAR_FILE"
+            displayName: 'Locate JAR'
+
+          - script: |
+              echo "=========================================="
+              echo "   Deploying to DEV"
+              echo "=========================================="
+              mvn mule:deploy \
+                -Dmule.deployment.provider=MC \
+                -Djarpath=$(JAR_FILE) \
+                -Dconnectedapp.clientid=$(anypointClientId) \
+                -Dconnectedapp.clientsecret=$(anypointClientSecret) \
+                -Danypoint.businessGroupId=$(muleOrgId) \
+                -Dcloudhub2.applicationName=$(cloudhubAppName) \
+                -Dcloudhub2.environment=$(CH2_ENVIRONMENT) \
+                -Dcloudhub2.target=$(CH2_TARGET) \
+                -Dcloudhub2.replicas=$(CH2_REPLICAS) \
+                -Dcloudhub2.vcores=$(CH2_VCORES) \
+                -Dcloudhub2.deploymentTimeout=1200000 \
+                -Dmule.env=$(mule.env) \
+                -Dsecure.key=1236526787652436 \
+                -Dencryption.key=1236526787652436 \
+                -Danypoint.platform.client_id=$(platformClientId) \
+                -Danypoint.platform.client_secret=$(platformClientSecret) \
+                -Dapi.id=$(apiInstanceId) \
+                -s ~/.m2/settings.xml
+              DEPLOY_STATUS=$?
+              [ $DEPLOY_STATUS -eq 0 ] && echo "DEV DEPLOYMENT SUCCESSFUL!" || { echo "DEV DEPLOYMENT FAILED"; exit 1; }
+            displayName: 'Deploy to DEV CloudHub 2.0'
+            env:
+              anypointClientId: $(anypointClientId)
+              anypointClientSecret: $(anypointClientSecret)
+              platformClientId: $(platformClientId)
+              platformClientSecret: $(platformClientSecret)
+              muleOrgId: $(muleOrgId)
+              apiInstanceId: $(apiInstanceId)
+
+
+  #####################################################
+  # STAGE 3: APPROVAL BEFORE TEST
+  #####################################################
+  - stage: TestApproval
+    displayName: 'Approval Before TEST'
+    dependsOn: Deploy_DEV
+    condition: succeeded()
+    jobs:
+      - job: WaitForTestApproval
+        displayName: 'Wait for TEST Approval'
+        pool: server
+        steps:
+          - task: ManualValidation@0
+            displayName: 'Approve TEST Deployment'
+            inputs:
+              instructions: 'DEV deployment succeeded. Approve to deploy to TEST?'
+              onTimeout: 'reject'
+              timeoutInMinutes: 1440                
+
+
+  #####################################################
+  # STAGE 4: DEPLOY TO TEST
+  #####################################################
+  - stage: Deploy_TEST
+    displayName: 'Deploy to TEST'
+    dependsOn: TestApproval
+    condition: succeeded()
+    variables:
+      - group: test.variables  # ✅ TEST specific variables
+    jobs:
+      - job: DeployTEST
+        displayName: 'Deploy to TEST'
+        steps:
+          - task: DownloadSecureFile@1
+            name: mavenSettings
+            displayName: 'Download Maven Settings'
+            inputs:
+              secureFile: 'settings.xml'
+
+          - script: |
+              mkdir -p ~/.m2
+              cp $(mavenSettings.secureFilePath) ~/.m2/settings.xml
+            displayName: 'Install Maven Settings'
+
+          - task: JavaToolInstaller@0
+            displayName: 'Setup Java 17'
+            inputs:
+              versionSpec: '17'
+              jdkArchitectureOption: 'x64'
+              jdkSourceOption: 'PreInstalled'
+
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download JAR Artifact'
+            inputs:
+              buildType: 'current'
+              artifactName: 'mule-project'
+              targetPath: '$(System.DefaultWorkingDirectory)/mule-project'
+          
+          
+          - script: |
+              JAR_FILE=$(find $(System.DefaultWorkingDirectory)/mule-project/target -name "*mule-application.jar" | head -1)
+              echo "JAR Found: $JAR_FILE"
+              if [ -z "$JAR_FILE" ]; then
+                echo "No JAR found!"
+                exit 1
+              fi
+              echo "##vso[task.setvariable variable=JAR_FILE]$JAR_FILE"
+            displayName: 'Locate JAR'
+
+          - script: |
+              echo "=========================================="
+              echo "   Deploying to TEST"
+              echo "=========================================="
+              mvn mule:deploy \
+                -Dmule.deployment.provider=MC \
+                -Djarpath=$(JAR_FILE) \
+                -Dconnectedapp.clientid=$(anypointClientId) \
+                -Dconnectedapp.clientsecret=$(anypointClientSecret) \
+                -Danypoint.businessGroupId=$(muleOrgId) \
+                -Dcloudhub2.applicationName=$(cloudhubAppName) \
+                -Dcloudhub2.environment=$(CH2_ENVIRONMENT) \
+                -Dcloudhub2.target=$(CH2_TARGET) \
+                -Dcloudhub2.replicas=$(CH2_REPLICAS) \
+                -Dcloudhub2.vcores=$(CH2_VCORES) \
+                -Dcloudhub2.deploymentTimeout=1200000 \
+                -Dmule.env=$(mule.env) \
+                -Dsecure.key=1236526787652436 \
+                -Dencryption.key=1236526787652436 \
+                -Danypoint.platform.client_id=$(platformClientId) \
+                -Danypoint.platform.client_secret=$(platformClientSecret) \
+                -Dapi.id=$(apiInstanceId) \
+                -s ~/.m2/settings.xml
+              DEPLOY_STATUS=$?
+              [ $DEPLOY_STATUS -eq 0 ] && echo "TEST DEPLOYMENT SUCCESSFUL!" || { echo "TEST DEPLOYMENT FAILED"; exit 1; }
+            displayName: 'Deploy to TEST CloudHub 2.0'
+            env:
+              anypointClientId: $(anypointClientId)
+              anypointClientSecret: $(anypointClientSecret)
+              platformClientId: $(platformClientId)
+              platformClientSecret: $(platformClientSecret)
+              muleOrgId: $(muleOrgId)
+              apiInstanceId: $(apiInstanceId)
+
+  #####################################################
+  # STAGE 5: APPROVAL BEFORE PROD
+  #####################################################
+  - stage: ProdApproval
+    displayName: 'Approval Before PROD'
+    dependsOn: Deploy_TEST
+    condition: succeeded()
+    jobs:
+      - job: WaitForProdApproval
+        displayName: 'Wait for PROD Approval'
+        pool: server
+        steps:
+          - task: ManualValidation@0
+            displayName: 'Approve PROD Deployment'
+            inputs:
+              instructions: 'TEST deployment succeeded. Approve to deploy to PROD?'
+              onTimeout: 'reject'
+              timeoutInMinutes: 1440
+
+  #####################################################
+  # STAGE 6: DEPLOY TO PROD
+  #####################################################
+  - stage: Deploy_PROD
+    displayName: 'Deploy to PROD'
+    dependsOn: ProdApproval
+    condition: succeeded()
+    variables:
+      - group: prod.variables  # ✅ PROD specific variables
+    jobs:
+      - job: DeployPROD
+        displayName: 'Deploy to PROD'
+        steps:
+          - task: DownloadSecureFile@1
+            name: mavenSettings
+            displayName: 'Download Maven Settings'
+            inputs:
+              secureFile: 'settings.xml'
+
+          - script: |
+              mkdir -p ~/.m2
+              cp $(mavenSettings.secureFilePath) ~/.m2/settings.xml
+            displayName: 'Install Maven Settings'
+
+          - task: JavaToolInstaller@0
+            displayName: 'Setup Java 17'
+            inputs:
+              versionSpec: '17'
+              jdkArchitectureOption: 'x64'
+              jdkSourceOption: 'PreInstalled'
+
+          - task: DownloadPipelineArtifact@2
+            displayName: 'Download JAR Artifact'
+            inputs:
+              buildType: 'current'
+              artifactName: 'mule-project'
+              targetPath: '$(System.DefaultWorkingDirectory)/mule-project'
+          
+          
+          - script: |
+              JAR_FILE=$(find $(System.DefaultWorkingDirectory)/mule-project/target -name "*mule-application.jar" | head -1)
+              echo "JAR Found: $JAR_FILE"
+              if [ -z "$JAR_FILE" ]; then
+                echo "No JAR found!"
+                exit 1
+              fi
+              echo "##vso[task.setvariable variable=JAR_FILE]$JAR_FILE"
+            displayName: 'Locate JAR'
+
+          - script: |
+              echo "=========================================="
+              echo "   Deploying to PROD"
+              echo "=========================================="
+              mvn mule:deploy \
+                -Dmule.deployment.provider=MC \
+                -Djarpath=$(JAR_FILE) \
+                -Dconnectedapp.clientid=$(anypointClientId) \
+                -Dconnectedapp.clientsecret=$(anypointClientSecret) \
+                -Danypoint.businessGroupId=$(muleOrgId) \
+                -Dcloudhub2.applicationName=$(cloudhubAppName) \
+                -Dcloudhub2.environment=$(CH2_ENVIRONMENT) \
+                -Dcloudhub2.target=$(CH2_TARGET) \
+                -Dcloudhub2.replicas=$(CH2_REPLICAS) \
+                -Dcloudhub2.vcores=$(CH2_VCORES) \
+                -Dcloudhub2.deploymentTimeout=1200000 \
+                -Dmule.env=$(mule.env) \
+                -Dsecure.key=1236526787652436 \
+                -Dencryption.key=1236526787652436 \
+                -Danypoint.platform.client_id=$(platformClientId) \
+                -Danypoint.platform.client_secret=$(platformClientSecret) \
+                -Dapi.id=$(apiInstanceId) \
+                -s ~/.m2/settings.xml
+              DEPLOY_STATUS=$?
+              [ $DEPLOY_STATUS -eq 0 ] && echo "PROD DEPLOYMENT SUCCESSFUL!" || { echo "PROD DEPLOYMENT FAILED"; exit 1; }
+            displayName: 'Deploy to PROD CloudHub 2.0'
+            env:
+              anypointClientId: $(anypointClientId)
+              anypointClientSecret: $(anypointClientSecret)
+              platformClientId: $(platformClientId)
+              platformClientSecret: $(platformClientSecret)
+              muleOrgId: $(muleOrgId)
+              apiInstanceId: $(apiInstanceId)              

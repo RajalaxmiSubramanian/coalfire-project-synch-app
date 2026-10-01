@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+
+  <sub-flow name="salesforce-writeback" doc:id="59f3c0b1-1e0b-4e04-8c1d-99b5f5283553" >
+		<try doc:name="Salesforce Writeback" doc:id="doc-690f6200">
+          <ee:transform doc:name="Extract Line Item Updates" doc:id="doc-6be54cb4">
+            <ee:variables doc:id="doc-ba446c95">
+					<ee:set-variable variableName="sfObject" ><![CDATA["OpportunityLineItem"]]></ee:set-variable>
+					<ee:set-variable resource="dwl/updateSfOppoLineItemInternalId.dwl" variableName="updateSfObject" />
+            
+</ee:variables>
+          </ee:transform>
+          <flow-ref doc:name="Update Salesforce Object - OpportunityLineItem" doc:id="8b947e61-5913-45b4-9ce2-a2e32cf24233" name="update-salesforce-object-subflow" />
+          <ee:transform doc:name="Transform Message" doc:id="97443276-61fb-47e1-a95a-74a78121ff6d" >
+				<ee:message >
+				</ee:message>
+				<ee:variables >
+					<ee:set-variable variableName="updateSfObject" ><![CDATA[%dw 2.0
+output application/json
+
+var failedProjectResults =
+    (vars.combinedLineItemResults default [])
+        filter ((item) -> item.overallSyncStatus == "Failure")
+
+---
+[{
+    Id: vars.opportunityId  default failedProjectResults[0].opportunityId,
+    SPP_Sync_Status__c:
+        if (!isEmpty(failedProjectResults))
+            "Failed"
+        else
+            "Processed"
+}]]]></ee:set-variable>
+					<ee:set-variable variableName="sfObject" ><![CDATA["Opportunity"]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<flow-ref doc:name="Update Salesforce Object - Opportunity" doc:id="b2fc2a9d-bf6d-4d6b-9502-6a6f47712dc3" name="update-salesforce-object-subflow" />
+          <error-handler doc:id="doc-f15d9e86">
+            <on-error-continue type="ANY" logException="true" doc:id="doc-805d5ac4">
+              <logger level="ERROR" message="#['[correlationId=' ++ (vars.correlationId default '') ++ '] [opportunityId=' ++ (vars.opportunityId default '') ++ '] [stage=SF_WRITEBACK] Salesforce writeback failed — ' ++ (error.description default '') ++ ' — continuing to next Opportunity.']" category="com.mycompany.sfspp.process-opportunity-subflow" doc:id="doc-8b6fbea1" />
+							<ee:transform doc:name="Add Failed Opportunity to List" doc:id="4e280121-817b-475e-a483-856189f773f3">
+								<ee:variables>
+									<ee:set-variable variableName="failedOpportunitiesList"><![CDATA[
+                  %dw 2.0
+output application/json
+---
+(vars.failedOpportunitiesList default []) ++ [{
+  opportunityId: vars.opportunityId,
+  accountId: vars.accountId,
+  failureReason: 'SALESFORCE_WRITE_BACK_ERROR',
+  failedLineItems: vars.combinedLineItemResults default []
+}]
+                ]]></ee:set-variable>
+								</ee:variables>
+							</ee:transform>
+            
+</on-error-continue>
+          </error-handler>
+        </try>
+	</sub-flow>
+
+</mule>

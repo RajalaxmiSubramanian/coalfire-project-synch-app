@@ -1,0 +1,7 @@
+%dw 2.0
+
+type auto_7f3ebd40_2cb5_4cd6_bde2_ed3eb1be06fe_Input_Payload = {|
+  Id: Null, 
+  SPP_Sync_Status__c: String
+|}
+

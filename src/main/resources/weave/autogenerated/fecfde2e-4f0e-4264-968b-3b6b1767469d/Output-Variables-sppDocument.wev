@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_fecfde2e_4f0e_4264_968b_3b6b1767469d_Output_Variables_sppDocument = {| oaDocumentId: Any |}
+

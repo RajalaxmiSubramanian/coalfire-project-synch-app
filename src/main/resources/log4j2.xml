@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{ISO8601} [%t] %-5p %c{1} - %msg%n"/>
+        </Console>
+
+        <!-- Log path/level externalized: override with -Dlog.path=/var/log -Dlog.level=DEBUG -->
+        <RollingFile name="FileAppender"
+                     fileName="${sys:log.path:-logs}/sf-spp-opportunity-synch-app.log"
+                     filePattern="${sys:log.path:-logs}/sf-spp-opportunity-synch-app-%d{yyyy-MM-dd}-%i.log">
+            <PatternLayout>
+                <Pattern>%d{ISO8601} [%t] %-5p %c{1} - %msg%n</Pattern>
+            </PatternLayout>
+            <Policies>
+                <TimeBasedTriggeringPolicy />
+                <SizeBasedTriggeringPolicy size="10 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="10"/>
+        </RollingFile>
+    </Appenders>
+
+    <Loggers>
+        <!-- Mule Core Loggers -->
+        <Logger name="org.mule.runtime" level="INFO"/>
+        <Logger name="org.mule.service.http" level="INFO"/>
+        <Logger name="org.mule.module.apikit" level="INFO"/>
+
+        <!-- Application Logger (level externalized via -Dlog.level) -->
+        <Logger name="com.mycompany" level="${sys:log.level:-INFO}"/>
+
+        <!-- Connector Loggers -->
+        <Logger name="com.mulesoft.connectors" level="INFO"/>
+        <Logger name="org.mule.extension.http" level="WARN"/>
+        <Logger name="org.mule.extension.db" level="INFO"/>
+        <Logger name="com.mulesoft.mule.runtime.module.salesforce" level="INFO"/>
+
+        <!-- DataWeave Logger -->
+        <Logger name="org.mule.weave" level="INFO"/>
+        
+        <AsyncLogger name="org.mule.service.http.impl.service.HttpMessageLogger" level="DEBUG"/>
+		<AsyncLogger name="com.mulesoft.connectors.openair" level="DEBUG"/>
+
+        <!-- Root Logger (level externalized via -Dlog.level) -->
+        <Root level="${sys:log.level:-INFO}">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="FileAppender"/>
+        </Root>
+    </Loggers>
+</Configuration>

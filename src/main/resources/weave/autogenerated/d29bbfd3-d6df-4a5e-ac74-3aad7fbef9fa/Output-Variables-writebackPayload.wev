@@ -1,0 +1,10 @@
+%dw 2.0
+
+type auto_d29bbfd3_d6df_4a5e_ac74_3aad7fbef9fa_Output_Variables_writebackPayload = {|
+  lineItemUpdates: Null, 
+  opportunityUpdate: {|
+    Id: Null, 
+    spp_Sync_Status__c: Null
+  |}
+|}
+

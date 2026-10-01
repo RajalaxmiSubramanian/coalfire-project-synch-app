@@ -1,0 +1,28 @@
+%dw 2.0
+// namespaces
+ns ns0 https://coalfire.app.sandbox.netsuitesuiteprojectspro.com/OAirServiceDocument
+
+type auto_fecfde2e_4f0e_4264_968b_3b6b1767469d_Output_Variables_soapServicePayload = {|
+  ns0#read: {|
+    method: {|
+      ReadRequest: {|
+        method: String, 
+        fields: String, 
+        attributes: {|
+          ReadAttribute: {|
+            name: String, 
+            value: String
+          |}
+        |}, 
+        "type": String, 
+        objects: {|
+          oaAttachment: {|
+            owner_type: String, 
+            ownerid: Null
+          |}
+        |}
+      |}
+    |}
+  |}
+|}
+

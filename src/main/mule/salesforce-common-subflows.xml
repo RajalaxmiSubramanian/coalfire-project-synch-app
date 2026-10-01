@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<sub-flow name="update-salesforce-object-subflow"
+		doc:id="7f3ebd40-2cb5-4cd6-bde2-ed3eb1be06fe">
+		<try doc:name="Try" doc:id="2a3ca9f0-73cc-4462-9f9b-dd6fc79ce1c7" >
+			<until-successful maxRetries="3" doc:name="Until Successful" doc:id="cb6de363-599e-4545-9683-e280e7bde7a4" millisBetweenRetries="3000" >
+				<try doc:name="Try" doc:id="84452bf1-82fb-4e5d-b754-10b7410a78a2" >
+					<salesforce:update config-ref="salesforceConfig" type="#[vars.sfObject]" target="lineItemUpdateResult" doc:name="Batch Update Opportunity Line Items" doc:id="72dfb0f5-8f4a-4ea2-bd18-06de5826623a">
+			<salesforce:records><![CDATA[#[vars.updateSfObject]]]></salesforce:records>
+
+		</salesforce:update>
+					<error-handler >
+						<on-error-propagate enableNotifications="true" logException="false" doc:name="On Error Propagate" doc:id="ee5accd5-9332-4a13-bb4b-f578521f2af1" type="SALESFORCE:CONNECTIVITY, SALESFORCE:TIMEOUT, SALESFORCE:UNAVAILABLE, SALESFORCE:COMMUNICATION" >
+							<logger level="WARN" doc:name="Logger" doc:id="ed40e658-60a3-4ca3-958d-975de4e38ca4" message="#['Transient Salesforce error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" category="salesforce.retry" />
+						</on-error-propagate>
+						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="76ff6588-37ff-4094-b109-17df5942c5c1" type="ANY" >
+							<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	'type': error.errorType.namespace default '' ++ ':' ++ error.errorType.identifier default '',&#10;     description: error.description default ''&#10;}]" doc:name="Flag permanent error" doc:id="aef2badb-2cf3-47cb-86c4-f2446405e020" variableName="sfError" />
+							<logger level="INFO" doc:name="Logger" doc:id="2e348d3b-48b0-42e3-b05e-90020776a7e2" message="#[vars.sfError]" />
+						</on-error-continue>
+					</error-handler>
+				</try>
+			</until-successful>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="ddbd3f72-ddfb-477e-9395-e89c1b09c415" type="ANY" >
+					<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	'type': error.errorType.namespace default '' ++ ':' ++ error.errorType.identifier default '',&#10;     description: error.description default ''&#10;}]" doc:name="Flag permanent error" doc:id="fd71eb66-07c0-4457-aacb-e34fad527866" variableName="sfError" />
+					<logger level="INFO" doc:name="Logger" doc:id="2a16451a-d3cf-4e93-aa62-b541d7a39099" message="#[vars.sfError]" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	
+</sub-flow>
+	<sub-flow name="common-salesforce-query-sub-flow"
+		doc:id="741b0ec5-9e43-4acd-97c3-011712fe6459">
+		<try doc:name="Try" doc:id="5ee5a355-ec94-4b7d-a4c6-532204c0d65b">
+			<until-successful maxRetries="3"
+				millisBetweenRetries="3000" doc:name="Until Successful">
+				<try doc:name="Try"
+					doc:id="05a492df-0539-4bf4-a466-8f2980fcdb8b">
+					<salesforce:query doc:name="Query"
+						doc:id="f6915012-1da6-419e-81f2-5388e304fb60"
+						config-ref="salesforceConfig">
+						<salesforce:salesforce-query><![CDATA[#[vars.querySalesforceObject]]]></salesforce:salesforce-query>
+					</salesforce:query>
+					<error-handler>
+						<!-- TRANSIENT: log and re-throw so Until Successful retries -->
+
+						<!-- PERMANENT (and anything unknown): swallow so Until Successful 
+							does NOT retry. Covers INVALID_INPUT, NOT_FOUND, INSUFFICIENT_PERMISSIONS, 
+							MUTUAL_AUTHENTICATION_FAILED, OPERATION_NOT_SUPPORTED, LIMIT_EXCEEDED, INVALID_RESPONSE, 
+							RETRY_EXHAUSTED, and everything else. -->
+						<on-error-propagate
+							type="SALESFORCE:CONNECTIVITY, SALESFORCE:TIMEOUT, SALESFORCE:UNAVAILABLE, SALESFORCE:COMMUNICATION"
+							logException="false">
+							<logger level="WARN" category="salesforce.retry"
+								message="#['Transient Salesforce error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" />
+						</on-error-propagate>
+						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="5be6b2e0-324e-4d3e-a3d6-6351cbbf172e" type="ANY" >
+							<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	'type': error.errorType.namespace default '' ++ ':' ++ error.errorType.identifier default '',&#10;     description: error.description default ''&#10;}]" doc:name="Flag permanent error" doc:id="da8abd5d-3c91-4e9f-8dba-3790fbfefb38" variableName="sfError" />
+							<logger level="INFO" doc:name="Logger" doc:id="49e8064d-2d83-4243-851c-47d4508052fc" message="#[vars.sfError]" />
+						</on-error-continue>
+
+					
+</error-handler>
+				</try>
+			</until-successful>
+			<error-handler>
+				<on-error-continue enableNotifications="true"
+					logException="true" doc:name="On Error Continue"
+					doc:id="d5771a1f-adc5-4179-9ceb-91df22da7675" type="ANY">
+					<set-variable
+						value="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	'type': error.errorType.namespace default '' ++ ':' ++ error.errorType.identifier default '',&#10;     description: error.description default ''&#10;}]"
+						doc:name="Flag permanent error"
+						doc:id="ecc11abd-cdc1-462c-b4fc-1289e64908c5"
+						variableName="sfError" />
+					<logger level="INFO" doc:name="Logger"
+						doc:id="972ae2d3-e1ee-4df9-8ecc-492442263328"
+						message="#[vars.sfError]" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+
+	</sub-flow>
+
+
+</mule>

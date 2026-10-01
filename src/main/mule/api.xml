@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc"
+	xmlns:openair="http://www.mulesoft.org/schema/mule/openair"
+      xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:http="http://www.mulesoft.org/schema/mule/http" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/openair http://www.mulesoft.org/schema/mule/openair/current/mule-openair.xsd
+http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd">
+<!--   <http:listener-config name="HTTPS_Listener_config" doc:name="HTTP Listener config">
+    <http:listener-connection host="0.0.0.0" port="8082" />
+  </http:listener-config> -->
+<!--   <apikit:config name="sf-spp-opportunity-synch-app-apikit-config" raml="api.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" doc:name="APIKit Router Config" />
+ -->
+<!--   <flow name="sf-spp-opportunity-synch-app-api-main" doc:name="sf-spp-opportunity-synch-app API Main" doc:id="091941d7-6007-49a5-1dd6-44197620d45c">
+    <http:listener path="/api/${api.majorVersion}/*" config-ref="HTTPS_Listener_config" doc:name="HTTP Listener" doc:id="c0200133-26ab-2481-b2a2-ea7f2cf8b80e">
+      <http:response statusCode="#[vars.httpStatus default 200]">
+        <http:headers>#[(vars.outboundHeaders default {}) ++ {'X-Correlation-Id': vars.correlationId default ''}]</http:headers>
+      </http:response>
+      <http:error-response statusCode="#[vars.httpStatus default 500]">
+        <http:body>#[payload]</http:body>
+        <http:headers>#[(vars.outboundHeaders default {}) ++ {'X-Correlation-Id': vars.correlationId default ''}]</http:headers>
+      </http:error-response>
+    </http:listener>
+    <apikit:router config-ref="sf-spp-opportunity-synch-app-apikit-config" doc:name="APIKit Router" doc:id="04a936b8-7306-792c-0483-11c020d8df10" />
+  </flow> -->
+
+  <flow name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:id="3f7f1a54-e573-f395-ca24-7065d093a8cb">
+    <http:listener doc:name="Listener" doc:id="83b003dd-8dbb-4cfe-9e8f-090483be07b1" config-ref="HTTP_Listener_config_test" path="/health"/>
+		<try doc:name="Check Salesforce" doc:id="b201eec2-b445-4030-8fcc-f17f64238f26">
+			<salesforce:query doc:name="Query" doc:id="b55b959e-623e-427d-a960-cd0571ec7e4e" config-ref="salesforceConfig">
+				<salesforce:salesforce-query ><![CDATA[SELECT Id FROM Account LIMIT 1]]></salesforce:salesforce-query>
+			</salesforce:query>
+			<ee:transform doc:name="Record Salesforce Health" doc:id="52977ac4-c84c-4728-ba4d-71b8eb264b82">
+        <ee:variables>
+					<ee:set-variable resource="dwl/sf-health-success-reponse.dwl" variableName="sfQueryResponse" />
+        
+</ee:variables>
+      </ee:transform>
+      <error-handler>
+        <on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="1ad89a01-0c2a-4ddc-a6f6-43428fb3999e">
+          <ee:transform doc:name="Record Salesforce Failure" doc:id="8e1f54ac-db3d-4338-9be0-b2421fa6a246">
+            <ee:variables>
+							<ee:set-variable resource="dwl/sf-health-query-failure-response.dwl" variableName="sfQueryFailureResponse" />
+            
+</ee:variables>
+          </ee:transform>
+        
+</on-error-continue>
+      </error-handler>
+    </try>
+  
+     <ee:transform doc:name="Soap request service -  login payload" doc:id="a13545dd-6328-4ab2-ba9d-b7ab0ffb803c">
+					<ee:message>
+					</ee:message>
+					<ee:variables>
+						<ee:set-variable variableName="soapOperation"><![CDATA["login"]]></ee:set-variable>
+				<ee:set-variable resource="dwl/login-soap-service-payload.dwl" variableName="soapServicePayload" />
+					
+</ee:variables>
+
+				</ee:transform>
+				<try doc:name="Try" doc:id="f4413141-876c-4962-85cd-278b466a8bd2">
+				<wsc:consume doc:name="Consume" doc:id="2b25a305-0879-468c-b907-4b337cec0970" config-ref="webServiceConsumerConfigHttp" operation="#[vars.soapOperation]">
+					<wsc:message>
+				<wsc:body><![CDATA[#[vars.soapServicePayload]]]></wsc:body>
+			</wsc:message>
+		</wsc:consume>
+		<ee:transform doc:name="Record Openair Health" doc:id="55f4bac0-ef5c-4173-ae4c-b28e8cdce1c9">
+        <ee:variables>
+							<ee:set-variable resource="dwl/soap-query-success-response.dwl" variableName="soapSuccessResponse" />
+        
+</ee:variables>
+      </ee:transform>
+			<error-handler>
+                    <!-- TRANSIENT: log and re-throw so Until Successful retries -->
+						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="5d0fcc63-8d10-4e72-a362-4614f1302ebd" type="ANY" >
+							<logger level="WARN" doc:name="Logger" doc:id="e40fd972-528e-4fdc-8d69-af2bae4aa82e" message="#['Permanent WSC error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" category="wsc.retry" />
+							<ee:transform doc:name="Record Openair Failure" doc:id="0ba411c7-c924-476d-8baa-35d01c9e6ddd">
+            <ee:variables>
+							<ee:set-variable resource="dwl/soap-failure-response.dwl" variableName="soapFailureResponse" />
+            
+</ee:variables>
+          </ee:transform>
+						</on-error-continue>
+                </error-handler>
+			</try>
+  
+		<ee:transform doc:name="Health Response" doc:id="33da7ea6-965b-4bc2-9426-ab9e3f72906f">
+      <ee:message>
+        <ee:set-payload><![CDATA[ %dw 2.0
+output application/json
+---
+{
+	SalesforceCheck:if(vars.sfQueryResponse == null) vars.sfQueryFailureResponse else vars.sfQueryResponse ,
+	NetsuiteSppCheck :if(vars.soapSuccessResponse == null) vars.soapFailureResponse else vars.soapSuccessResponse
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+</flow>
+
+</mule>

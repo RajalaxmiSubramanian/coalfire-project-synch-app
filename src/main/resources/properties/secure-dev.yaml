@@ -1,0 +1,25 @@
+keystore: 
+    path: certs\00DcY000007oEdF.jks
+salesforce:
+  consumerKey: "![1RvmbeQw6wT6fK6zRH8hIBDBQ4TVXdZ13lso7XbrZ3sKvc7vkV+PSv7hl6RTv0sZdgypgQXCKwyOs9EFq3m1iZCvOBhh2Uecozg58pufOWMKROScvILv3g==]"
+  password: "![CAeT1PMSN0xamcILKxtSzlK+dHxs2/a6]"
+  certificate: "![0Z9eRAvoxj5LUk1VbsSJVM4Po1JOLfPo]"
+  user: "![GzXDpYgZa3iE0n9tdrSaZnRMj9AxL7XKPvUpLOkHtwTIBDr9Kb6S34MB5g6AtwGQ]"
+  tokenEndpoint: https://test.salesforce.com/services/oauth2/token
+  
+openair:
+   api_namespace: "default"
+   apiKey       : "![Ou35WQR72Gf6SllVtsSiWymC70jYyK5+]"
+   company      : "![EOQZ5Yg4Ep6LVJbI61CaYA==]"
+   user         : "![V5Ul1y96reE=]"
+   password     : "![l/S7F3qDHi8h9UdSXKWDYA==]"
+   version      : "1.0"
+   
+
+graph:
+  tenantId: "![ImHL5kiUDVTROvbn/KFTYm5k9cVFjXO9XWAtb15ekM6v+kWgPpwJOA==]"
+  clientId: "![I57MBFyWxDCHblXzIRtdZJN9jtM0djfzcKshrqlCL15pKFsknI8ilg==]"
+  clientSecret: "![CecAWBGhRyKHHte+9tPpOHBBXJFmTIvipxiai0ahZ7+zRWkM54Nsr5Aj3H0sGowA]"
+  # The mailbox the mail is sent FROM (must be covered by the app's access policy)
+  senderMailbox: "mulesoft-integrations@coalfire.com"
+  toMailbox : "rr@coalfire.com ,Rajalaxmi.Subramanian@coalfire.com"

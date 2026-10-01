@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{ISO8601} [%t] %-5p %c{1} - %msg%n"/>
+        </Console>
+    </Appenders>
+    
+    <Loggers>
+        <!-- Test Loggers - More verbose for debugging -->
+        <Logger name="org.mule.runtime" level="INFO"/>
+        <Logger name="org.mule.service.http" level="WARN"/>
+        <Logger name="org.mule.module.apikit" level="DEBUG"/>
+        
+        <!-- MUnit Test Logger -->
+        <Logger name="org.mule.munit" level="INFO"/>
+        <Logger name="com.mulesoft.munit" level="INFO"/>
+        
+        <!-- Application Test Logger -->
+        <Logger name="com.mycompany" level="DEBUG"/>
+        
+        <!-- Connector Test Loggers -->
+        <Logger name="com.mulesoft.connectors" level="DEBUG"/>
+        <Logger name="org.mule.extension" level="INFO"/>
+        
+        <!-- DataWeave Test Logger -->
+        <Logger name="org.mule.weave" level="DEBUG"/>
+        
+        <!-- Root Logger - DEBUG level for tests -->
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+        </Root>
+    </Loggers>
+</Configuration>

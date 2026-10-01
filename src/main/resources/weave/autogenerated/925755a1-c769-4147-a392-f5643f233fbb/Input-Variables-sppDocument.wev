@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_925755a1_c769_4147_a392_f5643f233fbb_Input_Variables_sppDocument = {| oaDocumentId: Any |}
+

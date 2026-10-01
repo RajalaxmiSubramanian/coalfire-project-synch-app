@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_7f3ebd40_2cb5_4cd6_bde2_ed3eb1be06fe_Output_Variables_sfError = Any
+

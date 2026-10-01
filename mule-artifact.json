@@ -1,0 +1,16 @@
+{
+    "minMuleVersion": "4.10.0",
+    "javaSpecificationVersions": ["21"],
+    "secureProperties": [
+        "salesforce.clientId",
+        "salesforce.clientSecret",
+        "salesforce.username",
+        "salesforce.password",
+        "salesforce.tokenEndpoint",
+        "openair.username",
+        "openair.password",
+        "openair.apiKey",
+        "email.smtp.username",
+        "email.smtp.password"
+    ]
+}

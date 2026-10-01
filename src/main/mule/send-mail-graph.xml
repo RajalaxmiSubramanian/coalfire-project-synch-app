@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+  <!-- ============================================================
+       POST /send-mail
+       Body: { "to": ["a@x.com"], "cc": ["b@x.com"], "subject": "...",
+               "body": "...", "contentType": "Text|HTML",
+               "attachment": { "name": "f.json", "contentType": "application/json",
+                               "contentBase64": "..." } }
+       to, subject required. cc, contentType, attachment optional.
+       ============================================================ -->
+  <sub-flow name="sent-mail-notification-subflow" doc:id="087cc115-add5-42bc-b591-cebe90edb4be" >
+		<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;payload]" doc:name="Set Email Body" doc:id="40efc27c-235e-4ac4-b36f-3459cad96122" variableName="emailBody"/>
+		<ee:transform doc:name="Token request (form-urlencoded)">
+      <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+output application/x-www-form-urlencoded
+---
+{
+  client_id: p('secure::graph.clientId'),
+  client_secret: p('secure::graph.clientSecret'),
+  scope: "https://graph.microsoft.com/.default",
+  grant_type: "client_credentials"
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+		<try doc:name="Try" doc:id="fefa30dd-1ae1-42ff-8ebb-205d28da0bbd">
+			<until-successful maxRetries="3" doc:name="Until Successful" doc:id="e4b33604-9914-471c-81c7-30138107afd7" millisBetweenRetries="2000">
+			<http:request method="POST" config-ref="Graph_Token_Request_config" path="/{tenantId}/oauth2/v2.0/token" doc:name="Request token">
+      <http:uri-params><![CDATA[#[{ tenantId: p('secure::graph.tenantId') }]]]></http:uri-params>
+    </http:request>
+		</until-successful>
+			<error-handler>
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="90c0897c-99dd-4ea9-9dea-46478b20a017" type="HTTP:CONNECTIVITY, HTTP:GATEWAY_TIMEOUT, HTTP:SERVICE_UNAVAILABLE">
+					<logger level="INFO" doc:name="Logger" doc:id="6040d688-2140-4601-9a8d-ed50686ce4a6" message='#["Graph API token request connectivity issue" ++ error.description]' />
+				</on-error-propagate>
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="dc8af07a-4ae9-46bf-ab8a-d96522966f03" >
+					<logger level="INFO" doc:name="Logger" doc:id="bf1c49f3-0457-4aed-a8fd-b87c8c066e98" message='#["Graph API token request permanent issue" ++ error.description]' />
+				</on-error-continue>
+			</error-handler>
+		</try>
+		<set-variable value="#[payload.access_token]" doc:name="Set graphToken" doc:id="aa6c9ba4-beb7-4227-bb72-9236285ae8bb" variableName="graphToken" />
+		<ee:transform doc:name="Build sendMail body">
+      <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+var toMail = Mule::p("graph.toMailbox")
+---
+{
+    message: {
+        subject: "[SF-SPP Sync] Opportunity Synchronization Failures: " ++ (vars.runTimestamp default ""),
+        body: {
+            contentType: "HTML",
+            content: vars.emailBody as String
+        },
+        toRecipients: toMail
+            splitBy ","
+            map ((email) -> {
+                emailAddress: {
+                    address: trim(email)
+                }
+            })
+    }
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+	
+    
+    <try doc:name="Try" doc:id="aebf156d-5c6b-4122-b1fa-1934b97ac214">
+			<until-successful maxRetries="3" doc:name="Until Successful" doc:id="617f813e-4a1c-4ca8-8275-84eba9e69d52" millisBetweenRetries="6000">
+				<http:request method="POST" config-ref="Graph_API_Request_config" path="/v1.0/users/{mailbox}/sendMail" doc:name="Graph sendMail">
+      <http:headers><![CDATA[#[{ "Authorization": "Bearer " ++ vars.graphToken }]]]></http:headers>
+      <http:uri-params><![CDATA[#[{ mailbox: p('graph.senderMailbox') }]]]></http:uri-params>
+    </http:request>
+		</until-successful>
+			<error-handler>
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d30e81fb-8de8-4720-9e3a-dd85cd1d5976" type="HTTP:CONNECTIVITY, HTTP:GATEWAY_TIMEOUT, HTTP:SERVICE_UNAVAILABLE">
+					<logger level="INFO" doc:name="Logger" doc:id="aa3d401f-5970-4aab-bb1c-dbf769fc09b6" message='#["Graph API send mail connectivity issue" ++ error.description]' />
+				</on-error-propagate>
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="f291725e-4195-4a6a-86d4-15e8b590f4cf" >
+					<logger level="INFO" doc:name="Logger" doc:id="bdcb9000-46dd-4256-951d-62a019db9f29" message='#["Graph API send mail  permanent issue" ++ error.description]' />
+				</on-error-continue>
+			</error-handler>
+		</try>
+    
+    
+		<logger level="INFO" category="graph.mail" message="#['Graph sendMail returned HTTP ' ++ (attributes.statusCode as String)]" doc:name="Log result" />
+	</sub-flow>
+
+  <!-- ============================================================
+       Step 1: OAuth 2.0 client credentials token from Entra ID
+       ============================================================ -->
+
+  <!-- ============================================================
+       Step 2: POST /users/{mailbox}/sendMail with the Bearer token
+       (/me cannot be used with application permissions)
+       ============================================================ -->
+
+</mule>
