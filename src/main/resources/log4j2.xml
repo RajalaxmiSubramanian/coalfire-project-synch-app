@@ -38,8 +38,8 @@
         <!-- DataWeave Logger -->
         <Logger name="org.mule.weave" level="INFO"/>
         
-        <AsyncLogger name="org.mule.service.http.impl.service.HttpMessageLogger" level="DEBUG"/>
-		<AsyncLogger name="com.mulesoft.connectors.openair" level="DEBUG"/>
+        <AsyncLogger name="org.mule.service.http.impl.service.HttpMessageLogger" level="INFO"/>
+		<AsyncLogger name="com.mulesoft.connectors.openair" level="INFO"/>
 
         <!-- Root Logger (level externalized via -Dlog.level) -->
         <Root level="${sys:log.level:-INFO}">
