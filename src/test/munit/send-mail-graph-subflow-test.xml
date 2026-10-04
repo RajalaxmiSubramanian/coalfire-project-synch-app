@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+  <munit:config name="send-mail-graph-subflow-test" doc:name="MUnit configuration" />
+
+  <!-- ============================================================
+       sent-mail-notification-subflow
+       Test 1: Token request and sendMail both succeed
+       ============================================================ -->
+  <munit:test name="sent-mail-notification-subflow-success-test"
+              doc:name="sent-mail-notification-subflow - token and sendMail succeed"
+              description="When Graph token request and sendMail both succeed, the sub-flow completes without error.">
+
+    <munit:behavior>
+      <!-- Mock Graph token request -->
+      <munit-tools:mock-when doc:name="Mock Graph Token Request"
+                             processor="http:request">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Request token" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload
+            value="#[{access_token: 'mock-access-token-12345', token_type: 'Bearer', expires_in: 3600}]"
+            mediaType="application/json" />
+          <munit-tools:attributes
+            value="#[{statusCode: 200, reasonPhrase: 'OK', headers: {'content-type': 'application/json'}}]"
+            mediaType="application/java" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+
+      <!-- Mock Graph sendMail request -->
+      <munit-tools:mock-when doc:name="Mock Graph sendMail Request"
+                             processor="http:request">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Graph sendMail" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload value="#[null]" mediaType="application/java" />
+          <munit-tools:attributes
+            value="#[{statusCode: 202, reasonPhrase: 'Accepted', headers: {}}]"
+            mediaType="application/java" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-mail-001" doc:name="Set correlationId" />
+      <set-variable variableName="runTimestamp" value="2024-01-01T00:00:00Z" doc:name="Set runTimestamp" />
+      <set-variable variableName="failedOpportunitiesList"
+        value="#[[{opportunityId: 'OPP001', accountId: 'ACC001', failureReason: 'OPPORTUNITY_PROCESSING_FAILED', processResult: []}]]"
+        doc:name="Set failedOpportunitiesList" />
+      <flow-ref name="sent-mail-notification-subflow" doc:name="Run Sub-flow">
+        <munit-tools:with-payload
+          value="&lt;html&gt;&lt;body&gt;Test email body&lt;/body&gt;&lt;/html&gt;"
+          mediaType="text/plain" />
+      </flow-ref>
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:verify-call doc:name="Verify token request was made"
+                               processor="http:request"
+                               times="1">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Request token" />
+        </munit-tools:with-attributes>
+      </munit-tools:verify-call>
+      <munit-tools:verify-call doc:name="Verify sendMail request was made"
+                               processor="http:request"
+                               times="1">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Graph sendMail" />
+        </munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       sent-mail-notification-subflow
+       Test 2: Token request fails with connectivity error
+       ============================================================ -->
+  <munit:test name="sent-mail-notification-subflow-token-failure-test"
+              doc:name="sent-mail-notification-subflow - token request fails"
+              description="When Graph token request fails with a connectivity error, the error is propagated.">
+
+    <munit:behavior>
+      <!-- Mock Graph token request to fail -->
+      <munit-tools:mock-when doc:name="Mock Graph Token Request Failure"
+                             processor="http:request">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Request token" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:error typeId="HTTP:CONNECTIVITY" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-mail-002" doc:name="Set correlationId" />
+      <set-variable variableName="runTimestamp" value="2024-01-01T00:00:00Z" doc:name="Set runTimestamp" />
+      <set-variable variableName="failedOpportunitiesList"
+        value="#[[{opportunityId: 'OPP001', accountId: 'ACC001', failureReason: 'OPPORTUNITY_PROCESSING_FAILED', processResult: []}]]"
+        doc:name="Set failedOpportunitiesList" />
+      <!-- Error is swallowed by on-error-continue inside the sub-flow -->
+      <flow-ref name="sent-mail-notification-subflow" doc:name="Run Sub-flow">
+        <munit-tools:with-payload
+          value="&lt;html&gt;&lt;body&gt;Test email body&lt;/body&gt;&lt;/html&gt;"
+          mediaType="text/plain" />
+      </flow-ref>
+    </munit:execution>
+
+    <munit:validation>
+      <!-- The sub-flow swallows the error via on-error-continue, so no exception is expected -->
+      <munit-tools:verify-call doc:name="Verify token request was attempted"
+                               processor="http:request"
+                               times="1">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Request token" />
+        </munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       sent-mail-notification-subflow
+       Test 3: sendMail request fails with connectivity error
+       ============================================================ -->
+  <munit:test name="sent-mail-notification-subflow-sendmail-failure-test"
+              doc:name="sent-mail-notification-subflow - sendMail request fails"
+              description="When Graph sendMail request fails with a connectivity error, the error is handled by on-error-continue.">
+
+    <munit:behavior>
+      <!-- Mock Graph token request success -->
+      <munit-tools:mock-when doc:name="Mock Graph Token Request Success"
+                             processor="http:request">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Request token" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload
+            value="#[{access_token: 'mock-access-token-12345', token_type: 'Bearer', expires_in: 3600}]"
+            mediaType="application/json" />
+          <munit-tools:attributes
+            value="#[{statusCode: 200, reasonPhrase: 'OK', headers: {'content-type': 'application/json'}}]"
+            mediaType="application/java" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+
+      <!-- Mock Graph sendMail request to fail -->
+      <munit-tools:mock-when doc:name="Mock Graph sendMail Request Failure"
+                             processor="http:request">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Graph sendMail" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:error typeId="HTTP:CONNECTIVITY" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-mail-003" doc:name="Set correlationId" />
+      <set-variable variableName="runTimestamp" value="2024-01-01T00:00:00Z" doc:name="Set runTimestamp" />
+      <set-variable variableName="failedOpportunitiesList"
+        value="#[[{opportunityId: 'OPP001', accountId: 'ACC001', failureReason: 'OPPORTUNITY_PROCESSING_FAILED', processResult: []}]]"
+        doc:name="Set failedOpportunitiesList" />
+      <!-- Error is swallowed by on-error-continue inside the sub-flow -->
+      <flow-ref name="sent-mail-notification-subflow" doc:name="Run Sub-flow">
+        <munit-tools:with-payload
+          value="&lt;html&gt;&lt;body&gt;Test email body&lt;/body&gt;&lt;/html&gt;"
+          mediaType="text/plain" />
+      </flow-ref>
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:verify-call doc:name="Verify token request was made"
+                               processor="http:request"
+                               times="1">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Request token" />
+        </munit-tools:with-attributes>
+      </munit-tools:verify-call>
+      <munit-tools:verify-call doc:name="Verify sendMail request was attempted"
+                               processor="http:request"
+                               times="1">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="doc:name" whereValue="Graph sendMail" />
+        </munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+</mule>
