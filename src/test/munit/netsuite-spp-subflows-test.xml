@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+        http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+  <munit:config name="netsuite-spp-subflows-test" doc:name="MUnit configuration" />
+
+  <!-- ============================================================
+       batch-create-spp-projects-subflow
+       Test 1: SOAP add call succeeds - projects created
+       ============================================================ -->
+  <munit:test name="batch-create-spp-projects-success-test"
+              doc:name="batch-create-spp-projects-subflow - SOAP add succeeds"
+              description="When SOAP add call succeeds, projectCreationResults are set and successProjects are processed.">
+
+    <munit:behavior>
+      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Add Projects"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="soap-service-common-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload
+            value="#[{body: {addResponse: {addReturn: {UpdateResult: [{id: 'PROJ001', status: '1'}, {id: 'PROJ002', status: '1'}]}}}}]"
+            mediaType="application/java" />
+          <munit-tools:variables>
+            <munit-tools:variable key="wscError" value="#[null]" />
+            <munit-tools:variable key="oaErrorCode" value="#[null]" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+
+      <!-- Mock create-openair-document-subflow-wsc for projects with documents -->
+      <munit-tools:mock-when doc:name="Mock Create Document Sub-flow"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="create-openair-document-subflow-wsc" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:variables>
+            <munit-tools:variable key="createAttachmentResult"
+              value="#[{id: 'ATT001', errorReason: ''}]"
+              doc:name="Set createAttachmentResult" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-batch-001" doc:name="Set correlationId" />
+      <set-variable variableName="opportunityId" value="OPP001" doc:name="Set opportunityId" />
+      <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="newProjectCreationResults" value="#[[]]" doc:name="Set newProjectCreationResults" />
+      <set-variable variableName="sppCustomer"
+        value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
+        doc:name="Set sppCustomer" />
+      <set-variable variableName="projectsToCreate"
+        value="#[[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null, Product2: {Name: 'Product A'}}, {Id: 'LI002', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null, Product2: {Name: 'Product B'}}]]"
+        doc:name="Set projectsToCreate" />
+      <flow-ref name="batch-create-spp-projects-subflow" doc:name="Run Sub-flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:assert-that doc:name="Assert newProjectCreationResults is not null"
+                               expression="#[vars.newProjectCreationResults]"
+                               is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       batch-create-spp-projects-subflow
+       Test 2: SOAP add call fails (wscError set)
+       ============================================================ -->
+  <munit:test name="batch-create-spp-projects-failure-test"
+              doc:name="batch-create-spp-projects-subflow - SOAP add fails"
+              description="When SOAP add call fails, all projects are marked as Failure in newProjectCreationResults.">
+
+    <munit:behavior>
+      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Add Projects Failure"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="soap-service-common-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:variables>
+            <munit-tools:variable key="wscError"
+              value="#[{errorType: 'WSC:CONNECTIVITY', description: 'Connection refused'}]" />
+            <munit-tools:variable key="oaErrorCode" value="#[null]" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-batch-002" doc:name="Set correlationId" />
+      <set-variable variableName="opportunityId" value="OPP001" doc:name="Set opportunityId" />
+      <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="newProjectCreationResults" value="#[[]]" doc:name="Set newProjectCreationResults" />
+      <set-variable variableName="sppCustomer"
+        value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
+        doc:name="Set sppCustomer" />
+      <set-variable variableName="projectsToCreate"
+        value="#[[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null, Product2: {Name: 'Product A'}}]]"
+        doc:name="Set projectsToCreate" />
+      <flow-ref name="batch-create-spp-projects-subflow" doc:name="Run Sub-flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:assert-that doc:name="Assert newProjectCreationResults is not null"
+                               expression="#[vars.newProjectCreationResults]"
+                               is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       batch-create-spp-projects-subflow
+       Test 3: Projects created, some with documents
+       ============================================================ -->
+  <munit:test name="batch-create-spp-projects-with-documents-test"
+              doc:name="batch-create-spp-projects-subflow - projects with documents"
+              description="When projects are created successfully and have documents, create-openair-document-subflow-wsc is called for each.">
+
+    <munit:behavior>
+      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Add Projects With Docs"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="soap-service-common-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload
+            value="#[{body: {addResponse: {addReturn: {UpdateResult: [{id: 'PROJ001', status: '1'}]}}}}]"
+            mediaType="application/java" />
+          <munit-tools:variables>
+            <munit-tools:variable key="wscError" value="#[null]" />
+            <munit-tools:variable key="oaErrorCode" value="#[null]" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+
+      <munit-tools:mock-when doc:name="Mock Create Document Sub-flow"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="create-openair-document-subflow-wsc" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:variables>
+            <munit-tools:variable key="createAttachmentResult"
+              value="#[{id: 'ATT001', errorReason: ''}]"
+              doc:name="Set createAttachmentResult" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-batch-003" doc:name="Set correlationId" />
+      <set-variable variableName="opportunityId" value="OPP001" doc:name="Set opportunityId" />
+      <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="newProjectCreationResults" value="#[[]]" doc:name="Set newProjectCreationResults" />
+      <set-variable variableName="sppCustomer"
+        value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
+        doc:name="Set sppCustomer" />
+      <set-variable variableName="projectsToCreate"
+        value="#[[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: 'DOC001', Product2: {Name: 'Product A'}}]]"
+        doc:name="Set projectsToCreate" />
+      <flow-ref name="batch-create-spp-projects-subflow" doc:name="Run Sub-flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:verify-call doc:name="Verify create-openair-document-subflow-wsc was called"
+                               processor="flow-ref"
+                               times="1">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="create-openair-document-subflow-wsc" />
+        </munit-tools:with-attributes>
+      </munit-tools:verify-call>
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       create-openair-document-subflow-wsc
+       Test 1: SF query succeeds, document created in OpenAir
+       ============================================================ -->
+  <munit:test name="create-openair-document-subflow-success-test"
+              doc:name="create-openair-document-subflow-wsc - document created successfully"
+              description="When SF ContentVersion query succeeds and SOAP add attachment succeeds, createAttachmentResult has a valid id.">
+
+    <munit:behavior>
+      <!-- Mock common-salesforce-query-sub-flow for ContentVersion -->
+      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow - ContentVersion"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="common-salesforce-query-sub-flow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload
+            value="#[{Title: 'test.pdf', VersionData: ['dGVzdA=='], ContentSize: 4}]"
+            mediaType="application/java" />
+          <munit-tools:variables>
+            <munit-tools:variable key="sfError" value="#[null]" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+
+      <!-- Mock soap-service-attachment-subflow -->
+      <munit-tools:mock-when doc:name="Mock SOAP Attachment Sub-flow"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="soap-service-attachment-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload
+            value="#[{body: {addResponse: {addReturn: {UpdateResult: {id: 'ATT001', status: '1'}}}}}]"
+            mediaType="application/java" />
+          <munit-tools:variables>
+            <munit-tools:variable key="wscError" value="#[null]" />
+            <munit-tools:variable key="oaErrorCode" value="#[null]" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-doc-create-001" doc:name="Set correlationId" />
+      <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="currentProject"
+        value="#[{sppProjectId: 'PROJ001', opportunityLineItemId: 'LI001', hasRelatedDocument: true, sfDocumentId: 'DOC001'}]"
+        doc:name="Set currentProject" />
+      <set-variable variableName="currentLineItem"
+        value="#[{Id: 'LI001', Bid_Sheet_ContentDocumentId__c: 'DOC001'}]"
+        doc:name="Set currentLineItem" />
+      <flow-ref name="create-openair-document-subflow-wsc" doc:name="Run Sub-flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:assert-that doc:name="Assert createAttachmentResult id is set"
+                               expression="#[vars.createAttachmentResult.id]"
+                               is="#[MunitTools::equalTo('ATT001')]" />
+      <munit-tools:assert-that doc:name="Assert createAttachmentResult errorReason is empty"
+                               expression="#[vars.createAttachmentResult.errorReason]"
+                               is="#[MunitTools::equalTo('')]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       create-openair-document-subflow-wsc
+       Test 2: SF query fails - createAttachmentResult has empty id
+       ============================================================ -->
+  <munit:test name="create-openair-document-subflow-sf-error-test"
+              doc:name="create-openair-document-subflow-wsc - SF query fails"
+              description="When SF ContentVersion query fails (sfError set), createAttachmentResult has empty id and errorReason.">
+
+    <munit:behavior>
+      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow - ContentVersion Error"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="common-salesforce-query-sub-flow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload value="#[null]" mediaType="application/java" />
+          <munit-tools:variables>
+            <munit-tools:variable key="sfError"
+              value="#[{type: 'SALESFORCE:CONNECTIVITY', description: 'Connection refused'}]" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-doc-create-002" doc:name="Set correlationId" />
+      <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="currentProject"
+        value="#[{sppProjectId: 'PROJ001', opportunityLineItemId: 'LI001', hasRelatedDocument: true, sfDocumentId: 'DOC001'}]"
+        doc:name="Set currentProject" />
+      <set-variable variableName="currentLineItem"
+        value="#[{Id: 'LI001', Bid_Sheet_ContentDocumentId__c: 'DOC001'}]"
+        doc:name="Set currentLineItem" />
+      <flow-ref name="create-openair-document-subflow-wsc" doc:name="Run Sub-flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:assert-that doc:name="Assert createAttachmentResult id is empty"
+                               expression="#[vars.createAttachmentResult.id]"
+                               is="#[MunitTools::equalTo('')]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       create-openair-document-subflow-wsc
+       Test 3: SOAP attachment add fails - createAttachmentResult has empty id
+       ============================================================ -->
+  <munit:test name="create-openair-document-subflow-soap-error-test"
+              doc:name="create-openair-document-subflow-wsc - SOAP attachment add fails"
+              description="When SOAP add attachment fails (wscError set), createAttachmentResult has empty id.">
+
+    <munit:behavior>
+      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow - ContentVersion Success"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="common-salesforce-query-sub-flow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:payload
+            value="#[{Title: 'test.pdf', VersionData: ['dGVzdA=='], ContentSize: 4}]"
+            mediaType="application/java" />
+          <munit-tools:variables>
+            <munit-tools:variable key="sfError" value="#[null]" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+
+      <munit-tools:mock-when doc:name="Mock SOAP Attachment Sub-flow - Error"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="soap-service-attachment-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:variables>
+            <munit-tools:variable key="wscError"
+              value="#[{errorType: 'WSC:SOAP_FAULT', description: 'SOAP fault occurred'}]" />
+            <munit-tools:variable key="oaErrorCode" value="#[null]" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-doc-create-003" doc:name="Set correlationId" />
+      <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="currentProject"
+        value="#[{sppProjectId: 'PROJ001', opportunityLineItemId: 'LI001', hasRelatedDocument: true, sfDocumentId: 'DOC001'}]"
+        doc:name="Set currentProject" />
+      <set-variable variableName="currentLineItem"
+        value="#[{Id: 'LI001', Bid_Sheet_ContentDocumentId__c: 'DOC001'}]"
+        doc:name="Set currentLineItem" />
+      <flow-ref name="create-openair-document-subflow-wsc" doc:name="Run Sub-flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:assert-that doc:name="Assert createAttachmentResult id is empty"
+                               expression="#[vars.createAttachmentResult.id]"
+                               is="#[MunitTools::equalTo('')]" />
+    </munit:validation>
+  </munit:test>
+
+</mule>
