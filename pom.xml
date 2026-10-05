@@ -8,98 +8,27 @@
 	<packaging>mule-application</packaging>
 	<name>sf-spp-opportunity-synch-app-v12</name>
 	<description>Mule application deployed via Azure DevOps pipeline to CloudHub 2.0 Private Space</description>
-	<!-- <properties>
-		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-		<app.runtime>4.9.0</app.runtime>
-		<mule.maven.plugin.version>4.5.3</mule.maven.plugin.version>
-		MUnit Properties
-		<munit.version>3.4.0</munit.version>
-		CloudHub 2.0 Deployment Properties
-		<cloudhub2.target>Cloudhub-US-East-1</cloudhub2.target>
-		<cloudhub2.environment>dev</cloudhub2.environment>
-		<cloudhub2.replicas>1</cloudhub2.replicas>
-		<cloudhub2.vcores>0.1</cloudhub2.vcores>
-		<cloudhub2.applicationName>sf-spp-opportunity-synch</cloudhub2.applicationName>
-		<cloudhub2.deploymentTimeout>1200000</cloudhub2.deploymentTimeout>
-		Runtime Properties
-		<mule.env>dev</mule.env>
-		secure.key / encryption.key MUST be supplied at build/deploy time. Set them as:
-		   Maven: -Dsecure.key=$(MULE_SECURE_KEY) -Dencryption.key=$(MULE_ENCRYPTION_KEY)
-		   CloudHub: Runtime Manager > Application Properties
-		   Azure DevOps / GitHub Actions: pipeline secret variables
-		 Both values must be 16+ characters and stored only in your secrets manager.
-		 The empty defaults below will fail at startup if not overridden — that is intentional;
-		 shipping a literal placeholder value would have hidden a missing secret in production.
-		<secure.key>${env.MULE_SECURE_KEY}</secure.key>
-		<encryption.key>${env.MULE_ENCRYPTION_KEY}</encryption.key>
-		Anypoint Platform Properties — REQUIRED even for standalone apps: this
-		 identifies the target Business Group for the CloudHub 2.0 deployment
-		 itself (cloudhub2Deployment below), independent of API Manager
-		 Autodiscovery registration. Do NOT gate this on isStandaloneApp.
-		<anypoint.businessGroupId>${env.ANYPOINT_BUSINESS_GROUP_ID}</anypoint.businessGroupId>
-
-		CI/CD Variables — set these in:
-		 Azure DevOps: Library > Variable Groups
-		 GitHub Actions: repo Settings > Secrets
-		 CloudHub: Runtime Manager > Application Properties
-	  This is a standalone app (not registered with API Manager) — ANYPOINT_CLIENT_ID/
-	  ANYPOINT_CLIENT_SECRET/API_AUTODISCOVERY_ID are not required. Still required:
-	  ANYPOINT_BUSINESS_GROUP_ID  — Business group (org) ID from Anypoint Platform (for CloudHub 2.0 deployment)
-
-	</properties> -->
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
 		<app.runtime>4.9.0</app.runtime>
 		<mule.maven.plugin.version>4.5.3</mule.maven.plugin.version>
+		<munit.version>3.6.1</munit.version>
 	</properties>
-	<!-- <build>
+	<build>
 		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-clean-plugin</artifactId>
+				<version>3.2.0</version>
+			</plugin>
 			<plugin>
 				<groupId>org.mule.tools.maven</groupId>
 				<artifactId>mule-maven-plugin</artifactId>
 				<version>${mule.maven.plugin.version}</version>
 				<extensions>true</extensions>
-				<configuration>
-					<classifier>mule-application</classifier>
-					<cloudhub2Deployment>
-						<uri>https://anypoint.mulesoft.com</uri>
-						<provider>MC</provider>
-						<connectedAppClientId>${connectedapp.clientid}</connectedAppClientId>
-						<connectedAppClientSecret>${connectedapp.clientsecret}</connectedAppClientSecret>
-						<connectedAppGrantType>client_credentials</connectedAppGrantType>
-						<businessGroupId>${anypoint.businessGroupId}</businessGroupId>
-						<environment>${cloudhub2.environment}</environment>
-						<target>${cloudhub2.target}</target>
-						<applicationName>${cloudhub2.applicationName}</applicationName>
-						<muleVersion>${app.runtime}</muleVersion>
-						<replicas>${cloudhub2.replicas}</replicas>
-						<vCores>${cloudhub2.vcores}</vCores>
-						<deploymentTimeout>${cloudhub2.deploymentTimeout}</deploymentTimeout>
-						<properties>
-							<mule.env>${mule.env}</mule.env>
-							<environment>${cloudhub2.environment}</environment>
-							<secure.key>${secure.key}</secure.key>
-							<encryption.key>${encryption.key}</encryption.key>
-							<app.name>${cloudhub2.applicationName}</app.name>
-							<app.version>${project.version}</app.version>
-							<anypoint.orgId>${anypoint.businessGroupId}</anypoint.orgId>
-						</properties>
-						<server>anypoint-exchange-v3</server>
-						<integrations>
-							<services>
-								<objectStoreV2>
-									<enabled>true</enabled>
-								</objectStoreV2>
-							</services>
-						</integrations>
-					</cloudhub2Deployment>
-				</configuration>
 			</plugin>
-
-			 CRITICAL FIX: MUnit Maven Plugin with XML format and argLines
 			<plugin>
 				<groupId>com.mulesoft.munit.tools</groupId>
 				<artifactId>munit-maven-plugin</artifactId>
@@ -115,44 +44,13 @@
 					</execution>
 				</executions>
 				<configuration>
-					<runtimeVersion>${app.runtime}</runtimeVersion>
-					<runtimeProduct>MULE_EE</runtimeProduct>
-					<dynamicPorts>true</dynamicPorts>
-					 CRITICAL: Coverage Configuration with XML format
 					<coverage>
 						<runCoverage>true</runCoverage>
-						<failBuild>false</failBuild>
-						<requiredApplicationCoverage>0</requiredApplicationCoverage>
-						<requiredResourceCoverage>0</requiredResourceCoverage>
-						<requiredFlowCoverage>0</requiredFlowCoverage>
-						 CRITICAL: Must include xml format for Azure pipeline
 						<formats>
-							<format>console</format>
 							<format>html</format>
-							<format>xml</format>
 						</formats>
 					</coverage>
-					 CRITICAL: ArgLines for XML generation
-					<argLines>
-						<argLine>-Dmunit.output.folder=target/site/munit</argLine>
-						<argLine>-Dcoverage.report.generate.xml=true</argLine>
-					</argLines>
 				</configuration>
-			</plugin>
-		</plugins>
-	</build> -->
-	<build>
-		<plugins>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-clean-plugin</artifactId>
-				<version>3.2.0</version>
-			</plugin>
-			<plugin>
-				<groupId>org.mule.tools.maven</groupId>
-				<artifactId>mule-maven-plugin</artifactId>
-				<version>${mule.maven.plugin.version}</version>
-				<extensions>true</extensions>
 			</plugin>
 		</plugins>
 	</build>
@@ -169,19 +67,12 @@
 			<version>1.11.3</version>
 			<classifier>mule-plugin</classifier>
 		</dependency>
-		<!-- 		<dependency>
-			<groupId>com.mulesoft.mule.runtime.modules</groupId>
-			<artifactId>mule-module-dataweave</artifactId>
-			<version>2.9.0</version>
-			<classifier>mule-plugin</classifier>
-		</dependency> -->
 		<dependency>
 			<groupId>org.mule.connectors</groupId>
 			<artifactId>mule-email-connector</artifactId>
 			<version>1.7.4</version>
 			<classifier>mule-plugin</classifier>
 		</dependency>
-		
 		<dependency>
 			<groupId>org.mule.connectors</groupId>
 			<artifactId>mule-sockets-connector</artifactId>
@@ -219,14 +110,14 @@
 		<dependency>
 			<groupId>com.mulesoft.munit</groupId>
 			<artifactId>munit-runner</artifactId>
-			<version>3.4.0</version>
+			<version>3.6.1</version>
 			<classifier>mule-plugin</classifier>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>com.mulesoft.munit</groupId>
 			<artifactId>munit-tools</artifactId>
-			<version>3.4.0</version>
+			<version>3.6.1</version>
 			<classifier>mule-plugin</classifier>
 			<scope>test</scope>
 		</dependency>
@@ -236,76 +127,65 @@
 			<version>1.5.6</version>
 			<classifier>mule-plugin</classifier>
 		</dependency>
+		<dependency>
+			<groupId>org.mule.weave</groupId>
+			<artifactId>assertions</artifactId>
+			<version>1.2.1</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
-	<!-- <repositories>
-		Enterprise Repository for MUnit
-		<repository>
-			<id>releases-ee</id>
-			<name>Mule Enterprise Release Repository</name>
-			<url>https://repository.mulesoft.org/nexus/content/repositories/releases-ee/</url>
-			<layout>default</layout>
-		</repository>
-		<repository>
-			<id>anypoint-exchange-v3</id>
-			<name>Anypoint Exchange</name>
-			<url>https://maven.anypoint.mulesoft.com/api/v3/maven</url>
-			<snapshots>
-				<enabled>true</enabled>
-			</snapshots>
-		</repository>
-		<repository>
-			<id>mulesoft-releases</id>
-			<name>MuleSoft Releases</name>
-			<url>https://repository.mulesoft.org/releases/</url>
-		</repository>
-		<repository>
-			<id>mulesoft-nexus</id>
-			<name>MuleSoft Nexus Repository</name>
-			<url>https://repository.mulesoft.org/nexus/content/repositories/public/</url>
-		</repository>
-	</repositories> -->
+
 	<repositories>
-		<repository>
-			<id>anypoint-exchange-v3</id>
-			<name>Anypoint Exchange</name>
-			<url>https://maven.anypoint.mulesoft.com/api/v3/maven</url>
-			<layout>default</layout>
-		</repository>
-		<repository>
-			<id>mulesoft-releases</id>
-			<name>MuleSoft Releases Repository</name>
-			<url>https://repository.mulesoft.org/releases/</url>
-			<layout>default</layout>
-		</repository>
-	</repositories>
-	<!-- <pluginRepositories>
-		Enterprise Plugin Repository for MUnit
-		<pluginRepository>
-			<id>releases-ee</id>
-			<name>Mule Enterprise Release Repository</name>
-			<url>https://repository.mulesoft.org/nexus/content/repositories/releases-ee/</url>
-			<layout>default</layout>
-		</pluginRepository>
-		<pluginRepository>
-			<id>mulesoft-releases</id>
-			<name>MuleSoft Releases</name>
-			<url>https://repository.mulesoft.org/releases/</url>
-		</pluginRepository>
-		<pluginRepository>
-			<id>mulesoft-nexus</id>
-			<name>MuleSoft Nexus Repository</name>
-			<url>https://repository.mulesoft.org/nexus/content/repositories/public/</url>
-		</pluginRepository>
-	</pluginRepositories> -->
-	<pluginRepositories>
-		<pluginRepository>
-			<id>mulesoft-releases</id>
-			<name>MuleSoft Releases Repository</name>
-			<layout>default</layout>
-			<url>https://repository.mulesoft.org/releases/</url>
-			<snapshots>
-				<enabled>false</enabled>
-			</snapshots>
-		</pluginRepository>
-	</pluginRepositories>
+    <repository>
+        <id>anypoint-exchange-v3</id>
+        <name>Anypoint Exchange</name>
+        <url>https://maven.anypoint.mulesoft.com/api/v3/maven</url>
+        <layout>default</layout>
+    </repository>
+    <repository>
+        <id>mulesoft-releases</id>
+        <name>MuleSoft Releases Repository</name>
+        <url>https://repository.mulesoft.org/releases/</url>
+        <layout>default</layout>
+    </repository>
+    <repository>
+        <id>mulesoft-public</id>
+        <name>MuleSoft Public Repository</name>
+        <url>https://repository.mulesoft.org/nexus/content/repositories/public/</url>
+        <layout>default</layout>
+    </repository>
+<!--     <repository> -->
+<!--         <id>releases-ee</id> -->
+<!--         <name>Mule Enterprise Release Repository</name> -->
+<!--         <url>https://repository.mulesoft.org/nexus-ee/content/repositories/releases-ee/</url> -->
+<!--         <layout>default</layout> -->
+<!--         <releases> -->
+<!--             <enabled>true</enabled> -->
+<!--         </releases> -->
+<!--         <snapshots> -->
+<!--             <enabled>false</enabled> -->
+<!--         </snapshots> -->
+<!--     </repository> -->
+</repositories>
+
+<pluginRepositories>
+    <pluginRepository>
+        <id>mulesoft-releases</id>
+        <name>MuleSoft Releases Repository</name>
+        <url>https://repository.mulesoft.org/releases/</url>
+        <layout>default</layout>
+        <snapshots>
+            <enabled>false</enabled>
+        </snapshots>
+    </pluginRepository>
+<!--     <pluginRepository> -->
+<!--         <id>releases-ee</id> -->
+<!--         <name>Mule Enterprise Release Repository</name> -->
+<!--         <url>https://repository.mulesoft.org/nexus-ee/content/repositories/releases-ee/</url> -->
+<!--         <layout>default</layout> -->
+<!--         <snapshots> -->
+<!--             <enabled>false</enabled> -->
+<!--         </snapshots> -->
+<!--     </pluginRepository> -->
+</pluginRepositories>
 </project>

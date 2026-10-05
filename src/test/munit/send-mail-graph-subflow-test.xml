@@ -61,11 +61,8 @@
       <set-variable variableName="failedOpportunitiesList"
         value="#[[{opportunityId: 'OPP001', accountId: 'ACC001', failureReason: 'OPPORTUNITY_PROCESSING_FAILED', processResult: []}]]"
         doc:name="Set failedOpportunitiesList" />
-      <flow-ref name="sent-mail-notification-subflow" doc:name="Run Sub-flow">
-        <munit-tools:with-payload
-          value="&lt;html&gt;&lt;body&gt;Test email body&lt;/body&gt;&lt;/html&gt;"
-          mediaType="text/plain" />
-      </flow-ref>
+      <set-payload value="&lt;html&gt;&lt;body&gt;Test email body&lt;/body&gt;&lt;/html&gt;" doc:name="Set email body payload" mediaType="text/plain" />
+      <flow-ref name="sent-mail-notification-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
@@ -114,11 +111,8 @@
         value="#[[{opportunityId: 'OPP001', accountId: 'ACC001', failureReason: 'OPPORTUNITY_PROCESSING_FAILED', processResult: []}]]"
         doc:name="Set failedOpportunitiesList" />
       <!-- Error is swallowed by on-error-continue inside the sub-flow -->
-      <flow-ref name="sent-mail-notification-subflow" doc:name="Run Sub-flow">
-        <munit-tools:with-payload
-          value="&lt;html&gt;&lt;body&gt;Test email body&lt;/body&gt;&lt;/html&gt;"
-          mediaType="text/plain" />
-      </flow-ref>
+      <set-payload value="&lt;html&gt;&lt;body&gt;Test email body&lt;/body&gt;&lt;/html&gt;" doc:name="Set email body payload" mediaType="text/plain" />
+      <flow-ref name="sent-mail-notification-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
@@ -177,11 +171,8 @@
         value="#[[{opportunityId: 'OPP001', accountId: 'ACC001', failureReason: 'OPPORTUNITY_PROCESSING_FAILED', processResult: []}]]"
         doc:name="Set failedOpportunitiesList" />
       <!-- Error is swallowed by on-error-continue inside the sub-flow -->
-      <flow-ref name="sent-mail-notification-subflow" doc:name="Run Sub-flow">
-        <munit-tools:with-payload
-          value="&lt;html&gt;&lt;body&gt;Test email body&lt;/body&gt;&lt;/html&gt;"
-          mediaType="text/plain" />
-      </flow-ref>
+      <set-payload value="&lt;html&gt;&lt;body&gt;Test email body&lt;/body&gt;&lt;/html&gt;" doc:name="Set email body payload" mediaType="text/plain" />
+      <flow-ref name="sent-mail-notification-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>

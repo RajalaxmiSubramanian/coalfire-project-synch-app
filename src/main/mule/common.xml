@@ -24,7 +24,8 @@ http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/
 		<try doc:name="Try" doc:id="d5d7d405-80f1-48f5-b746-d4dc275ececb" >
 			<until-successful maxRetries="3" doc:name="Until Successful" doc:id="2ad91dfc-7abd-4845-b75d-bc13fbdc4e9c">
 			<try doc:name="Try" doc:id="04eb2460-a286-485a-97b8-e6a9adcd5ca2">
-				<wsc:consume doc:name="Consume" doc:id="65979dbb-583a-4f3f-921d-b6cbe70ab61c" config-ref="webServiceConsumerConfigHttp" operation="#[vars.soapOperation]">
+				<logger level="INFO" doc:name="Logger" doc:id="140545e8-b232-446e-960f-f14908d6b079" message='#["correlationId: " ++ vars.correlationId ++ " Started SPP Login request"]'/>
+					<wsc:consume doc:name="Consume" doc:id="65979dbb-583a-4f3f-921d-b6cbe70ab61c" config-ref="webServiceConsumerConfigHttp" operation="#[vars.soapOperation]">
 					<wsc:message>
 				<wsc:body><![CDATA[#[vars.soapServicePayload]]]></wsc:body>
 			</wsc:message>
@@ -32,11 +33,11 @@ http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/
 		<error-handler>
                     <!-- TRANSIENT: log and re-throw so Until Successful retries -->
                     <on-error-propagate type="WSC:CONNECTIVITY, WSC:TIMEOUT, WSC:CANNOT_DISPATCH" logException="false">
-                        <logger level="WARN" category="wsc.retry" message="#['Transient WSC error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" />
+                        <logger level="WARN" category="wsc.retry" message="#['correlationId: ' ++ vars.correlationId ++  ' Transient WSC error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" />
                     
 </on-error-propagate>
 						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="67e6d786-7707-498d-b917-8232925a0f48" type="ANY" >
-							<logger level="WARN" doc:name="Logger" doc:id="a1237b5b-9e5c-4015-b61e-5259cf578713" message="#['Permanent WSC error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" category="wsc.retry" />
+							<logger level="WARN" doc:name="Logger" doc:id="a1237b5b-9e5c-4015-b61e-5259cf578713" message="#['correlationId: ' ++ vars.correlationId ++ ' Permanent WSC error ' ++ error.errorType.identifier ++ '  ' ++ (error.description default '')]" category="wsc.retry" />
 							<set-variable value="#[%dw 2.0&#10;output application/java&#10;import * from dw::core::Objects&#10;---&#10;{&#10;  errorType: error.errorType.namespace ++ ':' ++ error.errorType.identifier,&#10;  description: error.description default '',&#10;  soapFault: if (error.errorType.identifier == 'SOAP_FAULT')&#10;      {&#10;        faultCode: error.errorMessage.payload.'soap:Fault'.faultcode default error.errorMessage.payload.Fault.faultcode default null,&#10;        faultString: error.errorMessage.payload.'soap:Fault'.faultstring default error.errorMessage.payload.Fault.faultstring default null,&#10;        detail: error.errorMessage.payload.'soap:Fault'.detail default error.errorMessage.payload.Fault.detail default null&#10;      }&#10;    else null&#10;}]" doc:name="Capture WSC error" doc:id="4c9ede73-5aea-420a-9895-fa4ee0e9275d" variableName="wscError" />
 						</on-error-continue>
                 </error-handler>
@@ -44,14 +45,14 @@ http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/
 		</until-successful>
 			<error-handler >
 				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="cab08675-50d3-432d-8976-5090e4bb4f10" type="ANY" >
-					<logger level="WARN" doc:name="Logger" doc:id="9cf39297-4065-42bf-aa4b-185a24526dec" message="#['Permanent WSC error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" category="wsc.retry" />
+					<logger level="WARN" doc:name="Logger" doc:id="9cf39297-4065-42bf-aa4b-185a24526dec" message="#[' WSC error ' ++ error.errorType.identifier ++ ' ' ++ (error.description default '')]" category="wsc.retry" />
 					<set-variable value="#[%dw 2.0&#10;output application/java&#10;import * from dw::core::Objects&#10;---&#10;{&#10;  errorType: error.errorType.namespace ++ ':' ++ error.errorType.identifier,&#10;  description: error.description default '',&#10;  soapFault: if (error.errorType.identifier == 'SOAP_FAULT')&#10;      {&#10;        faultCode: error.errorMessage.payload.'soap:Fault'.faultcode default error.errorMessage.payload.Fault.faultcode default null,&#10;        faultString: error.errorMessage.payload.'soap:Fault'.faultstring default error.errorMessage.payload.Fault.faultstring default null,&#10;        detail: error.errorMessage.payload.'soap:Fault'.detail default error.errorMessage.payload.Fault.detail default null&#10;      }&#10;    else null&#10;}]" doc:name="Capture WSC error" doc:id="5609eb46-5f58-473c-894f-3e41fd23d134" variableName="wscError" />
 				</on-error-continue>
 			</error-handler>
 		</try>
 		<choice doc:name="Choice" doc:id="72108292-1a49-46dc-be1a-938269c07d72" >
 			<when expression="#[!isEmpty(vars.wscError)]">
-				<logger level="INFO" doc:name="Logger" doc:id="c3807500-fe0e-4e0a-a291-9c3e6ccb45db" message='#["SPP Login failed" ++ vars.wscError default ""]'/>
+				<logger level="INFO" doc:name="Logger" doc:id="c3807500-fe0e-4e0a-a291-9c3e6ccb45db" message="#['correlationId: ' ++ vars.correlationId ++ ' SPP Login failed ' ++ vars.wscError default &quot;&quot;]"/>
 				<raise-error doc:name="SPP Login Issue" doc:id="8a25a0da-83d0-45c8-abe0-d74b716c3003" type="APP:PROCESS_ERROR" description="#[vars.wscError.description]"/>
 			</when>
 			<otherwise >
@@ -62,6 +63,7 @@ http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/
 						<ee:set-variable resource="dwl/soap-header-for-login.dwl" variableName="soapHeader" />
 			</ee:variables>
 		</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="bba1f2b2-fd5e-4310-ad5b-c3000b128475" message="#['correlationId: ' ++ vars.correlationId ++ ' SPP Login success ']"/>
 			</otherwise>
 		</choice>
 	</sub-flow>
@@ -78,6 +80,7 @@ http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/
 		<flow-ref doc:name="Call Soap Service - Read Attachment" doc:id="6eb7c654-5b81-4a70-bd57-d2cad08c5cd5" name="soap-service-common-subflow" />
 		<choice doc:name="Choice" doc:id="bf6668c1-543c-43ac-aef5-046aa95aae8b" >
 			<when expression="#[!isEmpty(vars.wscError) or !isEmpty(vars.oaErrorCode)]">
+				<logger level="INFO" doc:name="Logger" doc:id="978081ea-e0cd-4300-9614-84644d74793f" message="#['correlationId: ' ++ vars.correlationId ++ ' Handling document attachment for Existing project failed due to Attachment read failure']"/>
 				<ee:transform doc:name="Set Project Creation Call Failure Result" doc:id="626e9006-6625-4d28-9a06-12a91e8dbd24" >
 					<ee:message />
 					<ee:variables >
@@ -101,8 +104,9 @@ vars.existingProjectCreationResults default[]  ++ [{
 				</ee:transform>
 			</when>
 			<otherwise >
-					<set-variable value="#[%dw 2.0&#10;output application/json&#10;var docObject = payload.body.readResponse.readReturn.ReadResult.objects.oaAttachment&#10;---&#10;docObject]" doc:name="sppDocument" doc:id="aa5a82c6-9289-4518-bf76-238be20e7074" variableName="sppDocument" />
+				<set-variable value="#[%dw 2.0&#10;output application/json&#10;var docObject = payload.body.readResponse.readReturn.ReadResult.objects.oaAttachment&#10;---&#10;docObject]" doc:name="sppDocument" doc:id="aa5a82c6-9289-4518-bf76-238be20e7074" variableName="sppDocument" />
 			
+				<logger level="INFO" doc:name="Logger" doc:id="02ced14d-5026-42db-9be5-cf4e6915f848" message="#['correlationId: ' ++ vars.correlationId ++ ' Handling document attachment for Existing project read success']" />
 				<choice doc:name="Document Exists in OpenAir?" doc:id="868f8410-af77-4e26-bc08-6e27bab4c3a6">
           <when expression="#[!isEmpty(vars.sppDocument)]" doc:id="0b80dd61-94a0-4191-a317-941c16cc4c61">
             <ee:transform doc:name="Set Status Success - Document" doc:id="f414aab4-c610-4897-a36a-b047f2a73567">
@@ -128,6 +132,7 @@ vars.existingProjectCreationResults default[]  ++ [{
 ]]></ee:set-variable>
               </ee:variables>
             </ee:transform>
+						<logger level="INFO" doc:name="Logger" doc:id="3e1e292b-d526-47c7-9076-9a9259f12927" message="#['correlationId: ' ++ vars.correlationId ++ ' Handling document attachment for Existing project Document already exists for ProjectId' ++ vars.sppProject.oaProjectId]"/>
           </when>
 					<otherwise>
 						<flow-ref name="create-openair-document-subflow-wsc" doc:name="create-openair-document-subflow" doc:id="fcb077d4-d56d-42ae-9c9a-91b9808807db" />
@@ -153,6 +158,7 @@ vars.existingProjectCreationResults default[]  ++ [{
 ]]></ee:set-variable>
 							</ee:variables>
 						</ee:transform>
+						<logger level="INFO" doc:name="Logger" doc:id="b3bcc87a-5b7c-48c0-bd22-e3dbfe26627f" message="#['correlationId: ' ++ vars.correlationId ++ ' Handling document attachment for Existing project .Document created successfully for ProjectId' ++ vars.sppProject.oaProjectId ++ 'Document Id in SPP ' ++ (vars.createAttachmentResult.id default '')]"/>
 					</otherwise>
         </choice>
 			</otherwise>
@@ -162,7 +168,7 @@ vars.existingProjectCreationResults default[]  ++ [{
  
 
   <sub-flow name="send-failure-notification-subflow" doc:id="0a166653-7894-4af6-b95e-ef112bb88cae">
-    <logger level="INFO" message="#['[correlationId=' ++ (vars.correlationId default '') ++ '] [stage=EMAIL_NOTIFICATION] Building failure notification email for ' ++ (sizeOf(vars.failedOpportunitiesList default []) as String) ++ ' failed Opportunities.']" category="com.mycompany.sfspp.send-failure-notification-subflow" doc:id="9f572ea8-8102-40fc-9d6c-822cab07426f" />
+    <logger level="INFO" message="#['correlationId ' ++ vars.correlationId ++ &quot;Started Mail Notification for Failed Opportunities : &quot; ++ (vars.failedOpportunitiesList default [])]" category="com.mycompany.sfspp.send-failure-notification-subflow" doc:id="9f572ea8-8102-40fc-9d6c-822cab07426f" />
     <ee:transform doc:name="Build Failure Email Body" doc:id="6bfcc884-a07d-4508-9a01-80cc388ce171">
         <ee:message>
           <ee:set-payload resource="dw/failure-email-transform.dwl" />
@@ -174,21 +180,23 @@ vars.existingProjectCreationResults default[]  ++ [{
 		<try doc:name="Try" doc:id="5503f632-c486-4211-8162-cd4ef26414ba" >
 			<until-successful maxRetries="3" doc:name="Until Successful">
             <try doc:name="Try">
-                <wsc:consume operation="#[vars.soapOperation]" doc:name="Consume Soap Service for Customer and Project" doc:id="c50bc342-e243-4190-8a52-605a71bbc147" config-ref="webServiceConsumerConfigHttp">
+                <logger level="INFO" doc:name="Logger" doc:id="d23a0ea4-becf-48ba-a70f-87064e2b1c87" message="#['correlationId: ' ++ vars.correlationId ++ 'Soap Request to SPP for ' ++ vars.soapOperation]"/>
+					<wsc:consume operation="#[vars.soapOperation]" doc:name="Consume Soap Service for Customer and Project" doc:id="c50bc342-e243-4190-8a52-605a71bbc147" config-ref="webServiceConsumerConfigHttp">
 			<wsc:message>
 				<wsc:body><![CDATA[#[vars.soapServicePayload]]]></wsc:body>
 				<wsc:headers><![CDATA[#[vars.soapHeader]]]></wsc:headers>
 			</wsc:message>
 		</wsc:consume>
 					<set-variable value='#[%dw 2.0&#10;output application/json&#10;&#10;var oaErrorCode =&#10;    if (vars.soapOperation == "read")&#10;        payload.body.readResponse.ReadResult.errors.oaError.code default null&#10;    else if (vars.soapOperation == "add")&#10;        payload.body.addResponse.addReturn.UpdateResult.oaError.code default null&#10;    else&#10;        null&#10;&#10;---&#10;oaErrorCode]' doc:name="Set OA Error Variable" doc:id="4b740697-a887-4c73-aee1-cdebdfa7397a" variableName="oaErrorCode"/>
+					<logger level="INFO" doc:name="Logger" doc:id="e6d16ba8-955b-475f-a90b-ae7371670c0f" message="#['correlationId: ' ++ vars.correlationId ++ 'Soap Response received from SPP']" />
 					<error-handler>
                     <!-- TRANSIENT: log and re-throw so Until Successful retries -->
                     <on-error-propagate type="WSC:CONNECTIVITY, WSC:TIMEOUT, WSC:CANNOT_DISPATCH" logException="false">
-                        <logger level="WARN" category="wsc.retry" message="#['Transient WSC error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" />
+                        <logger level="WARN" category="wsc.retry" message="#['correlationId: ' ++ vars.correlationId ++ ' Transient WSC error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" />
                     
 </on-error-propagate>
 						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="41288bc3-d01f-4c92-9b38-1aa1d4b7da5c" type="ANY" >
-							<logger level="WARN" doc:name="Logger" doc:id="f502c4a0-0655-44db-8c18-6c43590076f1" message="#['Permanent WSC error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" category="wsc.retry" />
+							<logger level="WARN" doc:name="Logger" doc:id="f502c4a0-0655-44db-8c18-6c43590076f1" message="#['correlationId: ' ++ vars.correlationId ++ ' Permanent WSC error ' ++ error.errorType.identifier ++ ' ' ++ (error.description default '')]" category="wsc.retry" />
 							<set-variable value="#[%dw 2.0&#10;output application/java&#10;import * from dw::core::Objects&#10;---&#10;{&#10;  errorType: error.errorType.namespace ++ ':' ++ error.errorType.identifier,&#10;  description: error.description default '',&#10;  soapFault: if (error.errorType.identifier == 'SOAP_FAULT')&#10;      {&#10;        faultCode: error.errorMessage.payload.'soap:Fault'.faultcode default error.errorMessage.payload.Fault.faultcode default null,&#10;        faultString: error.errorMessage.payload.'soap:Fault'.faultstring default error.errorMessage.payload.Fault.faultstring default null,&#10;        detail: error.errorMessage.payload.'soap:Fault'.detail default error.errorMessage.payload.Fault.detail default null&#10;      }&#10;    else null&#10;}]" doc:name="Capture WSC error" doc:id="8fbd8edd-2169-4b31-bfe2-c605997ab90a" variableName="wscError" />
 						</on-error-continue>
                 </error-handler>
@@ -196,7 +204,7 @@ vars.existingProjectCreationResults default[]  ++ [{
         </until-successful>
 			<error-handler >
 				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="1ae25dc8-253b-43d6-8531-9dcb2b99072a" type="ANY" >
-					<logger level="WARN" doc:name="Logger" doc:id="946f2f65-13ba-4266-9c05-c537f4a3b1ce" message="#['Permanent WSC error ' ++ error.errorType.identifier ++ ', will retry: ' ++ (error.description default '')]" category="wsc.retry" />
+					<logger level="WARN" doc:name="Logger" doc:id="946f2f65-13ba-4266-9c05-c537f4a3b1ce" message="#['correlationId: ' ++ vars.correlationId ++  ' WSC error ' ++ error.errorType.identifier ++ ' ' ++ (error.description default '')]" category="wsc.retry" />
 					<set-variable value="#[%dw 2.0&#10;output application/java&#10;import * from dw::core::Objects&#10;---&#10;{&#10;  errorType: error.errorType.namespace ++ ':' ++ error.errorType.identifier,&#10;  description: error.description default '',&#10;  soapFault: if (error.errorType.identifier == 'SOAP_FAULT')&#10;      {&#10;        faultCode: error.errorMessage.payload.'soap:Fault'.faultcode default error.errorMessage.payload.Fault.faultcode default null,&#10;        faultString: error.errorMessage.payload.'soap:Fault'.faultstring default error.errorMessage.payload.Fault.faultstring default null,&#10;        detail: error.errorMessage.payload.'soap:Fault'.detail default error.errorMessage.payload.Fault.detail default null&#10;      }&#10;    else null&#10;}]" doc:name="Capture WSC error" doc:id="9ac80fb1-93fb-493d-aea5-cd2b53378c88" variableName="wscError" />
 				</on-error-continue>
 			</error-handler>
@@ -207,7 +215,10 @@ vars.existingProjectCreationResults default[]  ++ [{
 		<try doc:name="Try" doc:id="61fe2ace-20af-43cc-b984-07bb0fe36cc2" >
 		<until-successful maxRetries="3" doc:name="Until Successful" doc:id="31d8179f-465d-42e9-9367-6b126e20ae46">
 			<try doc:name="Try" doc:id="e8f4b006-f78d-4048-bb9a-b9299f6cd137">
-				<wsc:consume operation="#[vars.soapOperation]" doc:name="Consume Soap Service for Attachment" doc:id="4f0f8110-5a3e-4065-8424-423bf7c803e0" config-ref="webServiceConsumerConfigHttp">
+					<logger level="INFO" doc:name="Logger" doc:id="fe657d0e-5209-4439-a9eb-dc13947baacb" message="#['correlationId: ' ++ vars.correlationId ++ 'Soap Request to SPP for ' ++ vars.soapOperation]"/>
+					<set-variable value='#[%dw 2.0&#10;output application/json&#10;&#10;var oaErrorCode =&#10;    if (vars.soapOperation == "read")&#10;        payload.body.readResponse.ReadResult.errors.oaError.code default null&#10;    else if (vars.soapOperation == "add")&#10;        payload.body.addResponse.addReturn.UpdateResult.oaError.code default null&#10;    else&#10;        null&#10;&#10;---&#10;oaErrorCode]' doc:name="Set Variable" doc:id="51d9d4a2-cc00-4969-b8b4-fb79bba7df6a" variableName="oaErrorCode"/>
+					<logger level="INFO" doc:name="Logger" doc:id="803e600b-eff7-47a9-9d33-a851b8918c9a" message="#['correlationId: ' ++ vars.correlationId ++ 'Soap Response received from SPP']"/>
+					<wsc:consume operation="#[vars.soapOperation]" doc:name="Consume Soap Service for Attachment" doc:id="4f0f8110-5a3e-4065-8424-423bf7c803e0" config-ref="webServiceConsumerConfigHttp">
 					<wsc:message>
 						<wsc:headers><![CDATA[#[vars.soapHeader]]]></wsc:headers>
 					</wsc:message>

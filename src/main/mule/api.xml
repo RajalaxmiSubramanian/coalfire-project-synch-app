@@ -32,6 +32,7 @@ http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/
   <flow name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:id="3f7f1a54-e573-f395-ca24-7065d093a8cb">
     <http:listener doc:name="Listener" doc:id="83b003dd-8dbb-4cfe-9e8f-090483be07b1" config-ref="HTTP_Listener_config_test" path="/health"/>
 		<try doc:name="Check Salesforce" doc:id="b201eec2-b445-4030-8fcc-f17f64238f26">
+			<logger level="INFO" doc:name="Logger" doc:id="c407770c-4bd2-48b5-bb0c-91af18a91a17" message='#["Started Healthcheck for Salesforce"]'/>
 			<salesforce:query doc:name="Query" doc:id="b55b959e-623e-427d-a960-cd0571ec7e4e" config-ref="salesforceConfig">
 				<salesforce:salesforce-query ><![CDATA[SELECT Id FROM Account LIMIT 1]]></salesforce:salesforce-query>
 			</salesforce:query>
@@ -54,7 +55,8 @@ http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/
       </error-handler>
     </try>
   
-     <ee:transform doc:name="Soap request service -  login payload" doc:id="a13545dd-6328-4ab2-ba9d-b7ab0ffb803c">
+     <logger level="INFO" doc:name="Logger" doc:id="28ffa692-c204-4993-ab94-791bb0cc8593" message='#["Completed Healthcheck for Salesforce"]'/>
+		<ee:transform doc:name="Soap request service -  login payload" doc:id="a13545dd-6328-4ab2-ba9d-b7ab0ffb803c">
 					<ee:message>
 					</ee:message>
 					<ee:variables>
@@ -65,7 +67,8 @@ http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/
 
 				</ee:transform>
 				<try doc:name="Try" doc:id="f4413141-876c-4962-85cd-278b466a8bd2">
-				<wsc:consume doc:name="Consume" doc:id="2b25a305-0879-468c-b907-4b337cec0970" config-ref="webServiceConsumerConfigHttp" operation="#[vars.soapOperation]">
+				<logger level="INFO" doc:name="Logger" doc:id="74602a97-68fa-425b-b777-5d2e65c16a3b" message='#["Started Healthcheck for Netsuites Projects Pro"]'/>
+			<wsc:consume doc:name="Consume" doc:id="2b25a305-0879-468c-b907-4b337cec0970" config-ref="webServiceConsumerConfigHttp" operation="#[vars.soapOperation]">
 					<wsc:message>
 				<wsc:body><![CDATA[#[vars.soapServicePayload]]]></wsc:body>
 			</wsc:message>
@@ -90,6 +93,7 @@ http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/
                 </error-handler>
 			</try>
   
+		<logger level="INFO" doc:name="Logger" doc:id="f3280d65-1926-4606-adcb-b78696268c12" message='#["Completed Healthcheck for Netsuites Projects Pro"]'/>
 		<ee:transform doc:name="Health Response" doc:id="33da7ea6-965b-4bc2-9426-ab9e3f72906f">
       <ee:message>
         <ee:set-payload><![CDATA[ %dw 2.0
@@ -101,6 +105,7 @@ output application/json
 }]]></ee:set-payload>
       </ee:message>
     </ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="8f683c1d-92cd-4bc3-9078-27b897d1710e" message='#["Completed Healthcheck"]'/>
 </flow>
 
 </mule>

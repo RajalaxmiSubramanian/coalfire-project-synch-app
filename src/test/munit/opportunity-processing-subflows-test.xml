@@ -326,9 +326,8 @@
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <flow-ref name="process-opportunity-line-items" doc:name="Run Sub-flow">
-        <munit-tools:with-payload value="#[[]]" mediaType="application/java" />
-      </flow-ref>
+      <set-payload value="#[[]]" doc:name="Set empty line item payload" mediaType="application/java" />
+      <flow-ref name="process-opportunity-line-items" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
@@ -397,11 +396,8 @@
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <flow-ref name="process-opportunity-line-items" doc:name="Run Sub-flow">
-        <munit-tools:with-payload
-          value="#[[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null, Product2: {Name: 'Test Product'}}]]"
-          mediaType="application/java" />
-      </flow-ref>
+      <set-payload value="#[[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null, Product2: {Name: 'Test Product'}}]]" doc:name="Set line item payload" mediaType="application/java" />
+      <flow-ref name="process-opportunity-line-items" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
@@ -450,11 +446,8 @@
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow">
-        <munit-tools:with-payload
-          value="#[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]"
-          mediaType="application/java" />
-      </flow-ref>
+      <set-payload value="#[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]" doc:name="Set project line item payload" mediaType="application/java" />
+      <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
@@ -502,11 +495,8 @@
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow">
-        <munit-tools:with-payload
-          value="#[{Id: 'LI002', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]"
-          mediaType="application/java" />
-      </flow-ref>
+      <set-payload value="#[{Id: 'LI002', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]" doc:name="Set project line item payload" mediaType="application/java" />
+      <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
@@ -549,11 +539,8 @@
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow">
-        <munit-tools:with-payload
-          value="#[{Id: 'LI003', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]"
-          mediaType="application/java" />
-      </flow-ref>
+      <set-payload value="#[{Id: 'LI003', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]" doc:name="Set project line item payload" mediaType="application/java" />
+      <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
@@ -615,11 +602,8 @@
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow">
-        <munit-tools:with-payload
-          value="#[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: 'DOC001'}]"
-          mediaType="application/java" />
-      </flow-ref>
+      <set-payload value="#[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: 'DOC001'}]" doc:name="Set project line item payload" mediaType="application/java" />
+      <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>

@@ -16,8 +16,9 @@
             
 </ee:variables>
           </ee:transform>
-          <flow-ref doc:name="Update Salesforce Object - OpportunityLineItem" doc:id="8b947e61-5913-45b4-9ce2-a2e32cf24233" name="update-salesforce-object-subflow" />
-          <ee:transform doc:name="Transform Message" doc:id="97443276-61fb-47e1-a95a-74a78121ff6d" >
+          <logger level="INFO" doc:name="Logger" doc:id="8bf6514f-2ca8-470d-8c47-bd9b4b98eca5" message="#['correlationId: ' ++ vars.correlationId ++ ' updating sf write back with '++ vars.updateSfObject]"/>
+			<flow-ref doc:name="Update Salesforce Object - OpportunityLineItem" doc:id="8b947e61-5913-45b4-9ce2-a2e32cf24233" name="update-salesforce-object-subflow" />
+			<ee:transform doc:name="Transform Message" doc:id="97443276-61fb-47e1-a95a-74a78121ff6d" >
 				<ee:message >
 				</ee:message>
 				<ee:variables >
@@ -40,10 +41,11 @@ var failedProjectResults =
 					<ee:set-variable variableName="sfObject" ><![CDATA["Opportunity"]]></ee:set-variable>
 				</ee:variables>
 			</ee:transform>
+			<logger level="INFO" doc:name="Logger" doc:id="7603674e-c6be-45c8-9fb0-18bbb5a8c73e" message="#['correlationId: ' ++ vars.correlationId ++ ' updating sf oppt status  with '++ vars.updateSfObject]" />
 			<flow-ref doc:name="Update Salesforce Object - Opportunity" doc:id="b2fc2a9d-bf6d-4d6b-9502-6a6f47712dc3" name="update-salesforce-object-subflow" />
           <error-handler doc:id="doc-f15d9e86">
             <on-error-continue type="ANY" logException="true" doc:id="doc-805d5ac4">
-              <logger level="ERROR" message="#['[correlationId=' ++ (vars.correlationId default '') ++ '] [opportunityId=' ++ (vars.opportunityId default '') ++ '] [stage=SF_WRITEBACK] Salesforce writeback failed — ' ++ (error.description default '') ++ ' — continuing to next Opportunity.']" category="com.mycompany.sfspp.process-opportunity-subflow" doc:id="doc-8b6fbea1" />
+              <logger level="ERROR" message="#['correlationId: ' ++ vars.correlationId ++ 'Error in sf writeback . adding to failed Oppt List '++ vars.opportunityId ++ 'error' ++ error.description]" category="com.mycompany.sfspp.process-opportunity-subflow" doc:id="doc-8b6fbea1" />
 							<ee:transform doc:name="Add Failed Opportunity to List" doc:id="4e280121-817b-475e-a483-856189f773f3">
 								<ee:variables>
 									<ee:set-variable variableName="failedOpportunitiesList"><![CDATA[

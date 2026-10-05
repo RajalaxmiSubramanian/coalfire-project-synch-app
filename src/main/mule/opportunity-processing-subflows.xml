@@ -11,9 +11,10 @@
 	<sub-flow name="verify-opportunity-exists-and-process-subflow" doc:id="c15a43d8-c44a-44fa-a464-15e12a7c3586" >
 		<choice doc:name="Decide Based on SF Query result" doc:id="c88aca60-05b3-4333-838c-2528df908f9e">
 			<when expression="#[(sizeOf(payload default []) == 0)]">
-				<logger level="INFO" message="#['[correlationId=' ++ vars.correlationId ++ '] No Opportunities to process — ending successfully.']" doc:id="doc-04cc66b3" doc:name="No Opps - End of execution" />
+				<logger level="INFO" message="#['correlationId: ' ++ vars.correlationId ++ 'No Opportunities to process — ending successfully.']" doc:id="doc-04cc66b3" doc:name="No Opps - End of execution" />
 			</when>
 			<otherwise>
+				<logger level="INFO" doc:name="Logger" doc:id="c142bf10-082c-42bd-bb38-8ca792db5bae" message="#['correlationId: ' ++ vars.correlationId ++ 'Initiating login to SPP']"/>
 				<flow-ref doc:name="soap-consumer-login-subflow" doc:id="7a6f2a51-a740-4e65-b89a-b0910d192320" name="soap-consumer-login-subflow" />
 				<foreach collection="#[vars.opportunitiesResult]" doc:name="Process Each Opportunity Sequentially" doc:id="doc-f1d44767">
 					<try doc:name="Try Process Opportunity" doc:id="doc-dccd9234">
@@ -35,10 +36,12 @@ output application/json
 payload //Initialize current opportunity to currentOpportunity Variable]]></ee:set-variable>
 							</ee:variables>
 						</ee:transform>
+						<logger level="INFO" doc:name="Logger" doc:id="3679e035-22c1-4ce0-a82c-62b02fa1ab3a" message="#['correlationId: ' ++ vars.correlationId ++ 'Start processing Opportunity Sequentially for ' ++ vars.opportunityId]" />
 						<flow-ref name="process-opportunity-subflow" doc:name="Process Opportunity" doc:id="doc-00f7d248" />
+						<logger level="INFO" doc:name="Logger" doc:id="37dfb6ab-97bc-4026-8156-7afd330c5794" message="#['correlationId: ' ++ vars.correlationId ++ 'completed processing Opportunity  for ' ++ vars.opportunityId]" />
 						<error-handler doc:id="doc-52fbd2c7">
 							<on-error-continue type="ANY" logException="true" doc:id="doc-f8a1a2d5">
-								<logger level="ERROR" message="#['[correlationId=' ++ (vars.correlationId default '')]" category="com.mycompany.sfspp.sf-spp-opportunity-synch-main-flow" doc:id="doc-a1cc033d" />
+								<logger level="ERROR" message="#['correlationId: ' ++ vars.correlationId ++ 'Error processing Opportunity  for ' ++ vars.opportunityId]" category="com.mycompany.sfspp.sf-spp-opportunity-synch-main-flow" doc:id="doc-a1cc033d" />
 								<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;(vars.failedOpportunitiesList default []) ++ [{&#10;  opportunityId: vars.opportunityId default '',&#10;  accountId: vars.accountId default '',&#10;  sppError: vars.sppError default '' ++ vars.wscError default '',&#10;  failureReason: 'OPPORTUNITY_PROCESSING_FAILED',&#10;  processResult: []&#10;}]]" doc:name="Set failedOpportunitiesList" doc:id="63cda7bc-c1b3-45ce-a088-24e4baa62f9a" variableName="failedOpportunitiesList" />
 							</on-error-continue>
 						</error-handler>
@@ -50,6 +53,7 @@ payload //Initialize current opportunity to currentOpportunity Variable]]></ee:s
 	<sub-flow name="process-opportunity-subflow"
 		doc:id="doc-876d6dad">
 		<try doc:name="Try" doc:id="ebe6ca46-6a78-4a61-bdcd-e412b3fd0412">
+			<logger level="INFO" doc:name="Logger" doc:id="48d8eb3b-82e3-4d19-a856-76e83d11af95" message="#['correlationId: ' ++ vars.correlationId ++ 'start processing Opportunity Sequentially for ' ++ vars.opportunityId]"/>
 			<ee:transform doc:name="Soap request service -  read Customer payload" doc:id="ffc24aab-0cfd-4076-b9c2-4642aedf50ac">
 			<ee:message>
 			</ee:message>
@@ -63,11 +67,13 @@ payload //Initialize current opportunity to currentOpportunity Variable]]></ee:s
 				name="soap-service-common-subflow" />
 			<choice doc:name="Choice" doc:id="f9dbf421-ebcf-43e3-acff-a73a86dd4cfb" >
 				<when expression="#[!isEmpty(vars.wscError) or !isEmpty(vars.oaErrorCode)]">
+					<logger level="INFO" doc:name="Logger" doc:id="1162c309-b742-4de7-9e68-59f0409e192c" message="#['correlationId: ' ++ vars.correlationId ++ 'Failed during SPP customer Read call' ++ (vars.wscError.description default &quot;&quot;) ++ &quot;OA Error Code:&quot; ++ (vars.oaErrorCode default &quot;&quot;)]"/>
 					<set-variable value='#["SPP Read Customer Failed. Detailed Error: " ++ (vars.wscError.description default "") ++ "OA Error Code:" ++ (vars.oaErrorCode default "")]' doc:name="failureReason" doc:id="bc107fb0-1ccd-4f3a-bab3-66d2f2bbc2c9" variableName="failureReason" />
 					<raise-error doc:name="Raise error" doc:id="ebf4106c-d8c3-40b5-8b56-3baa00ab637d" type="APP:OPP_PROCESS_ERROR" description='#[vars.failureReason]' />
 				</when>
 				<otherwise >
 					<set-variable value='#[%dw 2.0&#10;output application/json&#10;var customer = payload.body.readResponse.readReturn.objects&#10;---&#10;{&#10;	oaCustomerId: if (customer != null) customer.oaCustomer.id else null,&#10;	oaCustomerName: if (customer != null) customer.oaCustomer.name else null,&#10;	opportunityId: vars.opportunityId,&#10;	customerStatus: if (customer.oaCustomer.id != null) "Existing" else "New"&#10;}]' doc:name="Soap Service response - Extract Customer" doc:id="1f0c9c3c-c8c0-4ce4-bc9d-493f21875b9e" variableName="sppCustomer" />
+					<logger level="INFO" doc:name="Logger" doc:id="b2629d08-fe66-4761-83ab-375967e9222b" message="#['correlationId: ' ++ vars.correlationId ++ 'Extracted Customer from SPP' ++ vars.sppCustomer]"/>
 					<choice doc:name="Choice" doc:id="954d39e5-bc4b-4d9b-b59d-0d8434500311">
 				<when expression="#[vars.sppCustomer.oaCustomerId == null]">
 					<ee:transform doc:name="Soap request service -  Add Customer" doc:id="3bf094df-6146-4e50-9e3a-786c1f7f9a09">
@@ -77,23 +83,27 @@ payload //Initialize current opportunity to currentOpportunity Variable]]></ee:s
 									<ee:set-variable resource="dwl/create-customer-in-spp-payload.dwl" variableName="soapServicePayload" />
 								</ee:variables>
 							</ee:transform>
+							<logger level="INFO" doc:name="Logger" doc:id="d40fa56f-71e7-4a1f-82f7-bb808f00fad3" message="#['correlationId: ' ++ vars.correlationId ++ 'Initiated new Customer creation in SPP']" />
 							<flow-ref doc:name="Call Soap Service - Create Customer" doc:id="0cae3782-81a0-4fb4-89c6-14906fae7a05" name="soap-service-common-subflow" />
 							<choice doc:name="Choice" doc:id="c02d77d1-fb72-4385-85f6-2fa411a1ac71">
 								<when expression="#[!isEmpty(vars.wscError) or !isEmpty(vars.oaErrorCode)]">
+									<logger level="INFO" doc:name="Logger" doc:id="80f0afe2-216e-4e12-b46f-6c37cd0286ac" message="#['correlationId: ' ++ vars.correlationId ++ 'Failed during SPP customer create call' ++ (vars.wscError.description default &quot;&quot;) ++ &quot;OA Error Code:&quot; ++ (vars.oaErrorCode default &quot;&quot;)]"/>
 									<set-variable value='#["SPP Create Customer Failed. Detailed Error: " ++ (vars.wscError.description default "") ++ "OA Error Code:" ++ (vars.oaErrorCode default "")]' doc:name="failureReason" doc:id="ac74273c-bb1a-40f4-b4ac-bc8ccb01e4b2" variableName="failureReason" />
 									<raise-error doc:name="Raise error" doc:id="f379cdf0-2522-4fd2-8e35-ac85b2a42f78" type="APP:OPP_PROCESS_ERROR" description='#[vars.failureReason]' />
 								</when>
 								<otherwise>
 									<set-variable value='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;	oaCustomerId: payload.body..*UpdateResult[0].id default null,&#10;	oaCustomerName: vars.currentOpportunity.Account.Name default null,&#10;	opportunityId: vars.opportunityId,&#10;	customerStatus: "Success"&#10;}]' doc:name="Soap Service response - Extract New Customer" doc:id="c31fb0fa-dfec-4840-a20a-a052c6ce610b" variableName="sppCustomer" />
+									<logger level="INFO" doc:name="Logger" doc:id="e3d6aa4c-1488-4afc-9045-21f72c0009be" message="#['correlationId: ' ++ vars.correlationId ++ 'completed new Customer creation in SPP' ++ vars.sppCustomer]"/>
 									
 								</otherwise>
 							</choice>
 				</when>
 				<otherwise>
-					<logger level="INFO" doc:name="Customer Already exists" doc:id="af1cca24-e64c-43bc-aca1-634c58ad32e9" message="#['[correlationId=' ++ (vars.correlationId default '') ++ '] [opportunityId=' ++ vars.opportunityId ++ '] Existing OpenAir Customer found — reusing ID: ' ++ (vars.sppCustomerData.oaCustomerId default 'null')]" category="com.mycompany.sfspp.process-opportunity-subflow" />
+					<logger level="INFO" doc:name="Customer Already exists" doc:id="af1cca24-e64c-43bc-aca1-634c58ad32e9" category="com.mycompany.sfspp.process-opportunity-subflow" message="#['correlationId: ' ++ vars.correlationId ++ 'skipping new Customer creation in SPP customer already exists']"/>
 				</otherwise>
 			</choice>
-			<ee:transform doc:name="Query Salesforce - OpportunityLineitem" doc:id="5a3f504d-5bb3-44fa-a723-0b0ae2b7a3ee" >
+			<logger level="INFO" doc:name="Logger" doc:id="5e629019-2659-42c7-86b1-efbd4a0985ca" message="#['correlationId: ' ++ vars.correlationId ++ 'Initiated salesforce opportunity line item query call ']"/>
+					<ee:transform doc:name="Query Salesforce - OpportunityLineitem" doc:id="5a3f504d-5bb3-44fa-a723-0b0ae2b7a3ee" >
 										<ee:message />
 										<ee:variables >
 							<ee:set-variable resource="dwl/query-salesforce-object-opportunityLineItem.dwl" variableName="querySalesforceObject" />
@@ -103,13 +113,15 @@ payload //Initialize current opportunity to currentOpportunity Variable]]></ee:s
 									<flow-ref doc:name="Query Salesforce Object - Opportunity Line Item" doc:id="a30cea4a-36fe-4ab7-87af-181d7ebea5c5" name="common-salesforce-query-sub-flow" />
 									<choice doc:name="Choice" doc:id="c7b7f279-9b96-46ee-ae65-468835819ac4" >
 										<when expression="#[!isEmpty(vars.sfError)]">
-							<logger level="INFO" doc:name="Logger" doc:id="8acf25b3-33f8-4735-8b53-6b356190562b" message='#["Salesforce query opportunity line item failed. Detailed Error: " ++ (vars.sfError default "")]'/>
+							<logger level="INFO" doc:name="Logger" doc:id="8acf25b3-33f8-4735-8b53-6b356190562b" message="#['correlationId: ' ++ vars.correlationId ++ 'Salesforce query opportunity line item failed. Detailed Error: ' ++ (vars.sfError default &quot;&quot;)]"/>
 							<raise-error doc:name="Raise error" doc:id="4dee3d99-8c4d-43b5-b6bb-43cee2f139b3" type="APP:OPP_PROCESS_ERROR" description='#[vars.sfError.description]'/>
 										
 </when>
 										<otherwise >
-											<flow-ref doc:name="process-opportunity-line-items" doc:id="fe20fc76-8a83-41ec-afa6-7158ebe1b35d" name="process-opportunity-line-items" />
-										</otherwise>
+											<logger level="INFO" doc:name="Logger" doc:id="5c3f68a8-eb9c-4131-b292-7cb1ca4f2a53" message="#['correlationId: ' ++ vars.correlationId ++ 'Response received from Salesforce oppt Line item call for  ' ++ vars.opportunityId ++ 'Oppt Line items as ' ++ sizeOf(payload default[])]"/>
+							<flow-ref doc:name="process-opportunity-line-items" doc:id="fe20fc76-8a83-41ec-afa6-7158ebe1b35d" name="process-opportunity-line-items" />
+										
+</otherwise>
 									</choice>
 				</otherwise>
 				
@@ -118,6 +130,7 @@ payload //Initialize current opportunity to currentOpportunity Variable]]></ee:s
 				<on-error-propagate enableNotifications="true"
 					logException="true" doc:name="On Error Propagate"
 					doc:id="c743260b-6fb6-4cbd-8511-9f5c75f47711" type="APP:OPP_PROCESS_ERROR">
+					<logger level="INFO" doc:name="Logger" doc:id="e2f80e63-fb88-4466-95c2-d138466fd7a8" message="#['correlationId: ' ++ vars.correlationId ++ ' Error in Initial phase - customer read/create and fetch line items from Salesforce']"/>
 					<ee:transform doc:name="Transform Message" doc:id="45a4e99a-29b0-499c-ac8f-06805032d9c0" >
 						<ee:message >
 							<ee:set-payload ><![CDATA[%dw 2.0
@@ -137,6 +150,7 @@ output application/java
 							<ee:set-variable variableName="sfObject" ><![CDATA["Opportunity"]]></ee:set-variable>
 						</ee:variables>
 					</ee:transform>
+					<logger level="INFO" doc:name="Logger" doc:id="e2c81604-d2af-4d64-80e6-1a08563afd63" message="#['correlationId: ' ++ vars.correlationId ++ 'Marking Opportunity as Failed in Salesforce' ++ vars.opportunityId]"/>
 					<flow-ref doc:name="Mark Opportunity Failed in Salesforce" doc:id="afacd8af-cbec-48d5-a0a5-763445ab06ae" name="update-salesforce-object-subflow" />
 				</on-error-propagate>
 			</error-handler>
@@ -164,26 +178,30 @@ output application/json
 				</ee:transform>
 				<foreach doc:name="Process Each Line Item Sequentially"
 					doc:id="doc-3dcb3757" collection="#[payload]">
+					<logger level="INFO" doc:name="Logger" doc:id="6e501689-1a86-4214-9f1d-0b2d0dc6fcb8" message="#['correlationId: ' ++ vars.correlationId ++ 'Initiated processing Opportunity line item' ++ payload.Id]"/>
 					<flow-ref name="verify-project-exists-in-spp-subflow" doc:name="verify-project-exists-in-spp-subflow" doc:id="doc-ebf0f037" />
 				</foreach>
 				<choice doc:name="Projects To Create?" doc:id="doc-4f0096e3">
 					<when
 						expression="#[sizeOf(vars.projectsToCreate default []) &gt; 0]"
 						doc:id="doc-5c1169cf">
+						<logger level="INFO" doc:name="Logger" doc:id="a8767e99-6d01-446c-a631-bef547068d99" message="#['correlationId: ' ++ vars.correlationId ++ 'Initiated batch project create with items as ' ++ sizeOf(vars.projectsToCreate default [])]"/>
 						<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;[] default []]" doc:name="Set New Variable for Project Creation Result" doc:id="7058b708-42f6-4a28-868f-c56834ac4ac9" variableName="newProjectCreationResults"/>
 						<flow-ref name="batch-create-spp-projects-subflow"
 							doc:name="batch-create-spp-projects-subflow"
 							doc:id="doc-00472b73" />
+						<logger level="INFO" doc:name="Logger" doc:id="c338dccb-9b6a-40c2-acf5-2a7b3ed65ad1" message="#['correlationId: ' ++ vars.correlationId ++ 'completed batch project create ']"/>
 					
 </when>
 					<otherwise doc:id="doc-5c08f660">
 						<logger level="INFO"
-							message="#['[correlationId=' ++ (vars.correlationId default '') ++ '] [opportunityId=' ++ vars.opportunityId ++ '] [No projects to create — skipping batch creation.']"
+							message="#['correlationId: ' ++ vars.correlationId ++ 'No projects to create — skipping batch creation' ++ vars.opportunityId]"
 							category="com.mycompany.sfspp.process-opportunity-subflow"
 							doc:id="doc-cdbc8115" doc:name="No Project to Create" />
 					</otherwise>
 				</choice>
 				<set-variable value="#[%dw 2.0&#10;output application/json&#10;var allProjectResults =(vars.existingProjectCreationResults default []) ++ (vars.newProjectCreationResults default [])&#10;---&#10;allProjectResults]" doc:name="Set Combined New and Existing Project Results" doc:id="c27ee297-a2d3-40ea-bf33-531f30b8ad38" variableName="combinedLineItemResults"/>
+				<logger level="INFO" doc:name="Logger" doc:id="f1dee910-396f-4441-9c1b-2427ba2e6adb" message="#['correlationId: ' ++ vars.correlationId ++ 'completed line item processing for this opportunity ' ++ vars.opportunityId ++ 'with overall result as ' ++ vars.combinedLineItemResults]"/>
 				<ee:transform doc:name="Success and Failed results" doc:id="0ce8a426-bb24-4a56-8260-21ed1925c6af">
 			<ee:message>
 			</ee:message>
@@ -211,11 +229,12 @@ var failedProjectResults = (vars.combinedLineItemResults default []) filter ((it
 )]]></ee:set-variable>
 			</ee:variables>
 		</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="9b9ce0bc-7904-4fe3-b878-84fb4f65f03d" message="#['correlationId: ' ++ vars.correlationId ++ 'Initiated writeback for all projects']"/>
 				<flow-ref doc:name="salesforce-writeback" doc:id="c5e6ea97-a545-4938-8e3c-880fe3bf5849" name="salesforce-writeback" />
-				<logger level="INFO" doc:name="Logger" doc:id="07b72665-d0c2-4257-ac24-9f432d891b81" message='#[%dw 2.0&#10;output application/json&#10;---&#10;{ &#10;	"OpportunityId" : vars.opportunityId default null,&#10;    "ExistingProjectProcessingResult": vars.existingProjectCreationResults default [],&#10;    "NewProjectProcessingResult": vars.newProjectCreationResults default []&#10;}]'/>
+				<logger level="INFO" doc:name="Logger" doc:id="07b72665-d0c2-4257-ac24-9f432d891b81" message="#['correlationId: ' ++ vars.correlationId ++ 'completed writeback for all projects']"/>
 			</when>
 			<otherwise>
-				<logger level="INFO" doc:name="No Opportunity Line items" doc:id="261ded60-1903-4715-bb77-9d6abce2ec1c" message="#['[correlationId=' ++ (vars.correlationId default '') ++ '] [opportunityId=' ++ vars.opportunityId ++ '] [No Opportunity line items]']" category="com.mycompany.sfspp.process-opportunity-subflow" />
+				<logger level="INFO" doc:name="No Opportunity Line items" doc:id="261ded60-1903-4715-bb77-9d6abce2ec1c" message="#['correlationId: ' ++ vars.correlationId ++ 'No Opportunity line item found']" category="com.mycompany.sfspp.process-opportunity-subflow" />
 				<ee:transform doc:name="Transform Message" doc:id="70cfbbc1-a2de-4a90-a57d-0a79079590fa">
 					<ee:message>
 						<ee:set-payload><![CDATA[%dw 2.0
@@ -235,6 +254,7 @@ output application/java
 						<ee:set-variable variableName="sfObject"><![CDATA["Opportunity"]]></ee:set-variable>
 					</ee:variables>
 				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="8d0a8fb2-3b1c-4eff-ae4a-693a9e86bea5" message="#['correlationId: ' ++ vars.correlationId ++ 'Marking opportunity as success in salesforce ' ++ vars.opportunityId]"/>
 				<flow-ref doc:name="update-salesforce-object-subflow" doc:id="f7be7e61-3ec5-4343-957c-49de8ceeb76b" name="update-salesforce-object-subflow"/>
 			</otherwise>
 		</choice>
@@ -268,11 +288,13 @@ payload.Id
 				<ee:set-variable resource="dwl/read-project-in-spp-payload.dwl" variableName="soapServicePayload" />
 			</ee:variables>
 		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="d1fbf00d-0f9b-4f44-a961-99221b7bfb7f" message="#['correlationId: ' ++ vars.correlationId ++ 'Initiated Read project for ' ++ vars.opportunityLineItemId]"/>
 		<flow-ref doc:name="Soap Service - Read Project"
 			doc:id="e8e2f8b3-26b4-457b-a18d-436c1dee40d3"
 			name="soap-service-common-subflow" />
 		<choice doc:name="Choice" doc:id="9cb60867-5273-4d58-82fb-995e578e40e8" >
 			<when expression="#[!isEmpty(vars.wscError) or !isEmpty(vars.oaErrorCode)]">
+				<logger level="INFO" doc:name="Logger" doc:id="aefc51aa-29db-4740-8f76-43449ade7bae" message="#['correlationId: ' ++ vars.correlationId ++ 'Failed during SPP project Read call' ++ (vars.wscError.description default &quot;&quot;) ++ &quot;OA Error Code:&quot; ++ (vars.oaErrorCode default &quot;&quot;)]"/>
 				<ee:transform doc:name="Set Project Creation Call Failure Result" doc:id="8bbd2669-1563-4ce0-b532-d5a07ade2d9d" >
 					<ee:message />
 					<ee:variables >
@@ -296,15 +318,18 @@ vars.existingProjectCreationResults default[] ++ [{
 			</when>
 			<otherwise >
 				<set-variable value='#[%dw 2.0&#10;output application/json&#10;var projectdata = payload.body.readResponse..ReadResult.objects&#10;---&#10;{&#10;	oaProjectId: projectdata.oaProject[0].id default "",&#10;	oaProject_sf_id__c: projectdata.oaProject[0].project_sf_id__c default "",&#10;	oaProjectName: projectdata.oaProject[0].name default "",&#10;	oaProjectStatus: if(projectdata.oaProject[0].id != null) "Existing" else null&#10;}]' doc:name="Soap Service response Payload - Extract line items" doc:id="81f54bcd-aeab-41b6-8b41-5060b6333ec0" variableName="sppProject" />
+				<logger level="INFO" doc:name="Logger" doc:id="9ba161d8-7712-49fe-9a82-46587cd742c8" message="#['correlationId: ' ++ vars.correlationId ++ 'completed Read project result as ' ++ vars.sppProject]"/>
 				<choice doc:name="Project Exists?" doc:id="4743fa7a-c846-4047-a568-c38a4d860db7">
 			<when expression="#[!isEmpty(vars.sppProject.oaProjectId)]" doc:id="50d48e27-9b0c-49cd-8d8c-9dfdd0ba0e26">
 			
 				<choice doc:name="Choice" doc:id="51d075a3-02b6-487d-9178-f5efb3725e16">
 				
 					<when expression="#[vars.currentLineItem.Bid_Sheet_ContentDocumentId__c != null]">
+								<logger level="INFO" doc:name="Logger" doc:id="e6771001-47ea-4a18-a7ab-8aba24e53b71" message="#['correlationId: ' ++ vars.correlationId ++ 'handling document for existing project  as related document exists ']"/>
 								<flow-ref name="handle-document-for-existing-project-subflow" doc:name="Handle Document for Existing Project" doc:id="0cac3f6c-466e-4264-8fd6-f32252a7b02c" />
 					</when>
 					<otherwise>
+								<logger level="INFO" doc:name="Logger" doc:id="ea7f3b60-6137-4ea0-bbeb-d1edb033d2ad" message="#['correlationId: ' ++ vars.correlationId ++ 'No document for exists project']"/>
 								<ee:transform doc:name="Set Project Creation Result" doc:id="409bd562-a95f-44cc-90f3-03234e9b4e18" >
 									<ee:message />
 									<ee:variables >
@@ -333,7 +358,8 @@ vars.existingProjectCreationResults default []  ++ [{
 </when>
 
 					<otherwise doc:id="92935b23-87de-40b6-9b28-bcd3361929b4">
-				<ee:transform doc:name="Add to Projects To Create" doc:id="196b1bf4-cc7f-4f5c-a393-997eba3a2b6b">
+				<logger level="INFO" doc:name="Logger" doc:id="b699ae0d-2594-4ec6-89f8-c8cf3d3b97a0" message="#['correlationId: ' ++ vars.correlationId ++ 'project added to create list as its new']"/>
+						<ee:transform doc:name="Add to Projects To Create" doc:id="196b1bf4-cc7f-4f5c-a393-997eba3a2b6b">
 					<ee:variables doc:id="12852bb0-11a6-4e6d-9ee0-1dccd052a478">
 								<ee:set-variable variableName="projectsToCreate" ><![CDATA[%dw 2.0
 output application/json

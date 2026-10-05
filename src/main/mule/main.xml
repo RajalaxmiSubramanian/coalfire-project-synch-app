@@ -21,12 +21,6 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 		<ee:transform
 			doc:name="Set Correlation ID and Run Timestamp" doc:id="doc-eedfee8c">
 			<ee:variables doc:id="doc-616e7799">
-				<ee:set-variable variableName="correlationId"
-					doc:id="doc-cdea98fe"><![CDATA[ %dw 2.0
-output application/json
----
-uuid()
-        ]]></ee:set-variable>
 				<ee:set-variable resource="dwl/read-query-salesforce-object-opportunity.dwl" variableName="querySalesforceObject" />
 				<ee:set-variable variableName="failedOpportunitiesList" ><![CDATA[
 %dw 2.0
@@ -39,18 +33,26 @@ output application/json
 ---
 now() as String {format: "yyyy-MM-dd'T'HH:mm:ss'Z'"}
         ]]></ee:set-variable>
+				<ee:set-variable variableName="correlationId" ><![CDATA[ %dw 2.0
+output application/json
+---
+uuid()
+        ]]></ee:set-variable>
 			</ee:variables>
 		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="86f48db5-b614-4132-abb5-f7f383935d45" message="#['correlationId: ' ++ vars.correlationId ++ 'Scheduler started processing at ' ++ vars.runTimestamp ++ 'Initiated Salesforce Query']"/>
 		<flow-ref doc:name="common-salesforce-query-sub-flow" doc:id="cd06ec62-356d-49ca-8494-befebe9b8422" name="common-salesforce-query-sub-flow" />
 		<choice doc:name="Choice" doc:id="4cd97c35-1cff-4b4c-9d7f-373145c59113" >
 			<when expression="#[!isEmpty(vars.sfError)]">
-				<logger level="INFO" doc:name="Logger" doc:id="8ed9a5c6-c52d-436f-9bc9-96999e7d8b8b" message='#["Salesforce Opportunity Query Failed. Detailed Error: " ++ (vars.sfError.description default "")]'/>
+				<logger level="INFO" doc:name="Logger" doc:id="8ed9a5c6-c52d-436f-9bc9-96999e7d8b8b" message="#['correlationId: ' ++ vars.correlationId ++ 'Salesforce Opportunity Query Failed. Detailed Error: ' ++ (vars.sfError.description default &quot;&quot;)]"/>
 				<raise-error doc:name="APP:PROCESS_ERROR" doc:id="756c921f-f63d-469f-980c-779d02af0c57" type="APP:PROCESS_ERROR" description="#[vars.sfError.description]"/>
 			</when>
 			<otherwise >
 				<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;payload]" doc:name="Set Opportunities Query Result" doc:id="e3e4f366-818c-44a0-a444-cef9b4f33f27" variableName="opportunitiesResult" />
+				<logger level="INFO" doc:name="Logger" doc:id="4e1f53d1-d26b-4eed-8e10-4023c090cc32" message="#['correlationId: ' ++ vars.correlationId ++ 'Salesforce response with opportunities ' ++ (sizeOf(vars.opportunitiesResult default []) default 0)]"/>
 				<flow-ref doc:name="verify-opportunity-exists-and-process-subflow" doc:id="ee2a8673-db67-4d36-93a8-1b1aa091eb0f" name="verify-opportunity-exists-and-process-subflow" />
-			</otherwise>
+			
+</otherwise>
 		</choice>
 		<choice doc:name="Send Failure Notification if Needed"
 			doc:id="doc-a951623d">
@@ -58,17 +60,18 @@ now() as String {format: "yyyy-MM-dd'T'HH:mm:ss'Z'"}
 				expression="#[sizeOf(vars.failedOpportunitiesList default []) &gt; 0]"
 				doc:id="doc-1fafc7de">
 				<try doc:name="Try" doc:id="c77b3e89-0a2a-4a56-8949-03ce35815f69" >
+					<logger level="INFO" doc:name="Logger" doc:id="fcb3faa3-10bc-4f44-8037-0d4c02fdc682" message="#['correlationId: ' ++ vars.correlationId ++ 'Failed opportunities exists .Initiating mail notification with size as ' ++ sizeOf(vars.failedOpportunitiesList default [])]"/>
 					<flow-ref name="send-failure-notification-subflow" doc:name="Send Failure Notification" doc:id="doc-537ecf64" />
 					<error-handler >
 						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="e67fc9bc-52e3-4382-9893-06fd3ca45f36" type="ANY" >
-							<logger level="INFO" doc:name="Logger" doc:id="8bf720cd-12ac-4645-ae32-31d9d7debb93" message='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;  status: "error",&#10;  errorType: (error.errorType.namespace default "") ++ ":" ++ (error.errorType.identifier default ""),&#10;  message: error.description default ""&#10;}]'/>
+							<logger level="INFO" doc:name="Logger" doc:id="8bf720cd-12ac-4645-ae32-31d9d7debb93" message='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;correlationId: vars.correlationId,&#10;  status: "error",&#10;  errorType: (error.errorType.namespace default "") ++ ":" ++ (error.errorType.identifier default ""),&#10;  message: error.description default ""&#10;}]'/>
 						</on-error-continue>
 					</error-handler>
 				</try>
 			</when>
 			<otherwise doc:id="doc-f0500f3a">
 				<logger level="INFO"
-					message="#['[correlationId=' ++ vars.correlationId ++ '] [stage=EMAIL_NOTIFICATION] No failures — email notification skipped.']"
+					message="#['correlationId: ' ++ vars.correlationId ++ 'No failures — email notification skipped.']"
 					category="com.mycompany.sfspp.sf-spp-opportunity-synch-main-flow"
 					doc:id="doc-42cc6b13" />
 			</otherwise>
