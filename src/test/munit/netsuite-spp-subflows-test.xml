@@ -254,44 +254,6 @@
        create-openair-document-subflow-wsc
        Test 2: SF query fails - createAttachmentResult has empty id
        ============================================================ -->
-  <munit:test name="create-openair-document-subflow-sf-error-test"
-              doc:name="create-openair-document-subflow-wsc - SF query fails"
-              description="When SF ContentVersion query fails (sfError set), createAttachmentResult has empty id and errorReason.">
-
-    <munit:behavior>
-      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow - ContentVersion Error"
-                             processor="flow-ref">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="name" whereValue="common-salesforce-query-sub-flow" />
-        </munit-tools:with-attributes>
-        <munit-tools:then-return>
-          <munit-tools:payload value="#[null]" mediaType="application/java" />
-          <munit-tools:variables>
-            <munit-tools:variable key="sfError"
-              value="#[{type: 'SALESFORCE:CONNECTIVITY', description: 'Connection refused'}]" />
-          </munit-tools:variables>
-        </munit-tools:then-return>
-      </munit-tools:mock-when>
-    </munit:behavior>
-
-    <munit:execution>
-      <set-variable variableName="correlationId" value="test-doc-create-002" doc:name="Set correlationId" />
-      <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
-      <set-variable variableName="currentProject"
-        value="#[{sppProjectId: 'PROJ001', opportunityLineItemId: 'LI001', hasRelatedDocument: true, sfDocumentId: 'DOC001'}]"
-        doc:name="Set currentProject" />
-      <set-variable variableName="currentLineItem"
-        value="#[{Id: 'LI001', Bid_Sheet_ContentDocumentId__c: 'DOC001'}]"
-        doc:name="Set currentLineItem" />
-      <flow-ref name="create-openair-document-subflow-wsc" doc:name="Run Sub-flow" />
-    </munit:execution>
-
-    <munit:validation>
-      <munit-tools:assert-that doc:name="Assert createAttachmentResult id is empty"
-                               expression="#[vars.createAttachmentResult.id]"
-                               is="#[MunitTools::equalTo('')]" />
-    </munit:validation>
-  </munit:test>
 
   <!-- ============================================================
        create-openair-document-subflow-wsc

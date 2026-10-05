@@ -68,12 +68,12 @@ fun getClientId(clientControls, id) =
 				  AI_Training_Allowed__c: item.Opportunity.AI_Training_Allowed__c,
 				  AI_Usage_Allowed__c: item.Opportunity.AI_Usage_Allowed__c,
 				  cfs_projectmanager__c:item.OA_Project_Manager_Id__c,
-				  //hierarchy_node_ids: pl4ToNsPracticeIdMap[item.CFS_Standard__c],
-				  hierarchy_node_ids:
-				  if (index == 1)
-                      "data"
-                  else
-                      pl4ToNsPracticeIdMap[item.CFS_Standard__c],
+				  hierarchy_node_ids: pl4ToNsPracticeIdMap[item.CFS_Standard__c],
+				  //hierarchy_node_ids:
+				  //if (index == 1)
+                    //  "data"
+                  //else
+                    //  pl4ToNsPracticeIdMap[item.CFS_Standard__c],
 				  Ship_To_Address_Country__c: item.Opportunity.Associated_Address__r.Shipping_Country__c,
 				  Ship_To_Address_State__c: item.Opportunity.Associated_Address__r.Shipping_State__c,
 				  Ship_To_Address_City__c: item.Opportunity.Associated_Address__r.Shipping_Address__City__s,

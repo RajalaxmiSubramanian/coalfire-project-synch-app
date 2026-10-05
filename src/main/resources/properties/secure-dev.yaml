@@ -22,4 +22,4 @@ graph:
   clientSecret: "![CecAWBGhRyKHHte+9tPpOHBBXJFmTIvipxiai0ahZ7+zRWkM54Nsr5Aj3H0sGowA]"
   # The mailbox the mail is sent FROM (must be covered by the app's access policy)
   senderMailbox: "mulesoft-integrations@coalfire.com"
-  toMailbox : "rr@coalfire.com ,Rajalaxmi.Subramanian@coalfire.com"
+  toMailbox : "rr@coalfire.com ,Rajalaxmi.Subramanian@coalfire.com,naveen.daghay@coalfire.com"

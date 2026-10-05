@@ -14,7 +14,7 @@ ns oair https://coalfire.app.sandbox.netsuitesuiteprojectspro.com/OAirServiceDoc
           "type"    : "Customer",
           objects   : {
             oaCustomer: {
-              customer_sf_id__c : "123"
+              customer_sf_id__c : vars.accountId
             }
           }
         }      

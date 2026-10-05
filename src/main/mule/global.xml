@@ -120,7 +120,7 @@ http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/em
 			type="APP:PROCESS_ERROR">
 			<logger level="INFO" doc:name="Logger"
 				doc:id="8fd85536-e18b-43ed-849b-5407f75e4f36"
-				message="#['correlationId: ' ++ vars.correlationId ++ ' Failure at Initial phase. Going to Send Mail Notification']" />
+				message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Failure at Initial phase. Going to Send Mail Notification'&#10;}]" />
 			<ee:transform doc:name="Transform Message" doc:id="137442be-9054-47c7-8fc3-f8440278936c" >
 				<ee:message >
 					<ee:set-payload ><![CDATA[%dw 2.0
@@ -148,7 +148,36 @@ Integration Team</p>
 			<flow-ref doc:name="sent-mail-notification-subflow" doc:id="05074457-1457-4f51-8cf6-1d53f5914fd2" 
 				name="sent-mail-notification-subflow"/>
 		</on-error-propagate>
-	</error-handler>
+		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="1b9249fb-6643-406e-b09a-a7f4649cbf73" type="ANY" >
+			<logger level="INFO" doc:name="Logger" doc:id="399a50a4-975f-4023-b702-c2c7882798e3" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Failure at Initial phase. Going to Send Mail Notification'&#10;}]" />
+			<ee:transform doc:name="Transform Message" doc:id="23a49bdb-c5a8-4ba3-bc8b-ce855bc53a56" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output text/plain
+---
+"<html>
+<body>
+<p>Hi Team,</p>
+
+<p>
+The Opportunity Project Sync process has completed.
+Opportunity is failed during intial data retrieval phase so no Lineitmes are processed 
+</p>
+
+
+<p>Please review the above Opportunities and take the necessary action.</p>
+
+<p>Thanks,<br/>
+Integration Team</p>
+
+</body>
+</html>"]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<flow-ref doc:name="sent-mail-notification-subflow" doc:id="058f3895-1a8f-4cbf-a465-ebf519df0496" name="sent-mail-notification-subflow" />
+		</on-error-propagate>
+	
+</error-handler>
 	<http:request-config
 		name="Graph_Token_Request_config"
 		doc:name="HTTP Request config - Entra ID token"

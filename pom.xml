@@ -1,19 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
-	<!-- <groupId>aceb673b-30f8-4591-982c-8ed2cd883a70</groupId> -->
-	<groupId>com.mycompany</groupId>
+	 <groupId>7440b457-5b69-4049-a3b9-f660d8f57744</groupId>
+
 	<artifactId>sf-spp-opportunity-synch-app</artifactId>
-	<version>1.0.0-SNAPSHOT</version>
+	<version>1.0.1-SNAPSHOT</version>
 	<packaging>mule-application</packaging>
-	<name>sf-spp-opportunity-synch-app-v12</name>
+	<name>sf-spp-opportunity-synch-app-v14</name>
 	<description>Mule application deployed via Azure DevOps pipeline to CloudHub 2.0 Private Space</description>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
 		<app.runtime>4.9.0</app.runtime>
-		<mule.maven.plugin.version>4.5.3</mule.maven.plugin.version>
+		<mule.maven.plugin.version>4.10.1</mule.maven.plugin.version>
 		<munit.version>3.6.1</munit.version>
 	</properties>
 	<build>
@@ -28,6 +28,9 @@
 				<artifactId>mule-maven-plugin</artifactId>
 				<version>${mule.maven.plugin.version}</version>
 				<extensions>true</extensions>
+				<configuration>
+					<classifier>mule-application</classifier>
+				</configuration>
 			</plugin>
 			<plugin>
 				<groupId>com.mulesoft.munit.tools</groupId>
@@ -136,56 +139,56 @@
 	</dependencies>
 
 	<repositories>
-    <repository>
-        <id>anypoint-exchange-v3</id>
-        <name>Anypoint Exchange</name>
-        <url>https://maven.anypoint.mulesoft.com/api/v3/maven</url>
-        <layout>default</layout>
-    </repository>
-    <repository>
-        <id>mulesoft-releases</id>
-        <name>MuleSoft Releases Repository</name>
-        <url>https://repository.mulesoft.org/releases/</url>
-        <layout>default</layout>
-    </repository>
-    <repository>
-        <id>mulesoft-public</id>
-        <name>MuleSoft Public Repository</name>
-        <url>https://repository.mulesoft.org/nexus/content/repositories/public/</url>
-        <layout>default</layout>
-    </repository>
-<!--     <repository> -->
-<!--         <id>releases-ee</id> -->
-<!--         <name>Mule Enterprise Release Repository</name> -->
-<!--         <url>https://repository.mulesoft.org/nexus-ee/content/repositories/releases-ee/</url> -->
-<!--         <layout>default</layout> -->
-<!--         <releases> -->
-<!--             <enabled>true</enabled> -->
-<!--         </releases> -->
-<!--         <snapshots> -->
-<!--             <enabled>false</enabled> -->
-<!--         </snapshots> -->
-<!--     </repository> -->
-</repositories>
+		<repository>
+			<id>anypoint-exchange-v3</id>
+			<name>Anypoint Exchange</name>
+			<url>https://maven.anypoint.mulesoft.com/api/v3/maven</url>
+			<layout>default</layout>
+		</repository>
+		<repository>
+			<id>mulesoft-releases</id>
+			<name>MuleSoft Releases Repository</name>
+			<url>https://repository.mulesoft.org/releases/</url>
+			<layout>default</layout>
+		</repository>
+		<repository>
+			<id>mulesoft-public</id>
+			<name>MuleSoft Public Repository</name>
+			<url>https://repository.mulesoft.org/nexus/content/repositories/public/</url>
+			<layout>default</layout>
+		</repository>
+		<!--     <repository> -->
+		<!--         <id>releases-ee</id> -->
+		<!--         <name>Mule Enterprise Release Repository</name> -->
+		<!--         <url>https://repository.mulesoft.org/nexus-ee/content/repositories/releases-ee/</url> -->
+		<!--         <layout>default</layout> -->
+		<!--         <releases> -->
+		<!--             <enabled>true</enabled> -->
+		<!--         </releases> -->
+		<!--         <snapshots> -->
+		<!--             <enabled>false</enabled> -->
+		<!--         </snapshots> -->
+		<!--     </repository> -->
+	</repositories>
 
-<pluginRepositories>
-    <pluginRepository>
-        <id>mulesoft-releases</id>
-        <name>MuleSoft Releases Repository</name>
-        <url>https://repository.mulesoft.org/releases/</url>
-        <layout>default</layout>
-        <snapshots>
-            <enabled>false</enabled>
-        </snapshots>
-    </pluginRepository>
-<!--     <pluginRepository> -->
-<!--         <id>releases-ee</id> -->
-<!--         <name>Mule Enterprise Release Repository</name> -->
-<!--         <url>https://repository.mulesoft.org/nexus-ee/content/repositories/releases-ee/</url> -->
-<!--         <layout>default</layout> -->
-<!--         <snapshots> -->
-<!--             <enabled>false</enabled> -->
-<!--         </snapshots> -->
-<!--     </pluginRepository> -->
-</pluginRepositories>
+	<pluginRepositories>
+		<pluginRepository>
+			<id>mulesoft-releases</id>
+			<name>MuleSoft Releases Repository</name>
+			<url>https://repository.mulesoft.org/releases/</url>
+			<layout>default</layout>
+			<snapshots>
+				<enabled>false</enabled>
+			</snapshots>
+		</pluginRepository>
+		<!--     <pluginRepository> -->
+		<!--         <id>releases-ee</id> -->
+		<!--         <name>Mule Enterprise Release Repository</name> -->
+		<!--         <url>https://repository.mulesoft.org/nexus-ee/content/repositories/releases-ee/</url> -->
+		<!--         <layout>default</layout> -->
+		<!--         <snapshots> -->
+		<!--             <enabled>false</enabled> -->
+		<!--         </snapshots> -->
+		<!--     </pluginRepository> -->
+	</pluginRepositories>
 </project>

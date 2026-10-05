@@ -18,7 +18,7 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
        ============================================================ -->
   <sub-flow name="sent-mail-notification-subflow" doc:id="087cc115-add5-42bc-b591-cebe90edb4be" >
 		<set-variable value="#[%dw 2.0&#10;output application/java&#10;---&#10;payload]" doc:name="Set Email Body" doc:id="40efc27c-235e-4ac4-b36f-3459cad96122" variableName="emailBody"/>
-		<logger level="INFO" doc:name="Logger" doc:id="ce0fc07e-9e5d-42e9-8bef-f20aec16bf59" message="#['correlationId: ' ++ vars.correlationId ++ 'Initiated Mail graph api token call']"/>
+		<logger level="INFO" doc:name="Logger" doc:id="ce0fc07e-9e5d-42e9-8bef-f20aec16bf59" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Initiated Mail graph api token call'&#10;}]"/>
 		<ee:transform doc:name="Token request (form-urlencoded)">
       <ee:message>
         <ee:set-payload><![CDATA[%dw 2.0
@@ -38,13 +38,13 @@ output application/x-www-form-urlencoded
       <http:uri-params><![CDATA[#[{ tenantId: p('secure::graph.tenantId') }]]]></http:uri-params>
     </http:request>
 		</until-successful>
-			<logger level="INFO" doc:name="Logger" doc:id="711a4fab-23c9-475b-9eb8-ea490b60102c" message="#['correlationId: ' ++ vars.correlationId ++ 'completed Mail graph api token call']"/>
+			<logger level="INFO" doc:name="Logger" doc:id="711a4fab-23c9-475b-9eb8-ea490b60102c" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'completed Mail graph api token call'&#10;}]"/>
 			<error-handler>
 				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="90c0897c-99dd-4ea9-9dea-46478b20a017" type="HTTP:CONNECTIVITY, HTTP:GATEWAY_TIMEOUT, HTTP:SERVICE_UNAVAILABLE">
-					<logger level="INFO" doc:name="Logger" doc:id="6040d688-2140-4601-9a8d-ed50686ce4a6" message='#["Graph API token request connectivity issue" ++ error.description]' />
+					<logger level="INFO" doc:name="Logger" doc:id="6040d688-2140-4601-9a8d-ed50686ce4a6" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Graph API token request connectivity issue',&#10;&quot;errorDescription&quot; :error.description default ''&#10;}]" />
 				</on-error-propagate>
 				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="dc8af07a-4ae9-46bf-ab8a-d96522966f03" >
-					<logger level="INFO" doc:name="Logger" doc:id="bf1c49f3-0457-4aed-a8fd-b87c8c066e98" message='#["Graph API token request permanent issue" ++ error.description]' />
+					<logger level="INFO" doc:name="Logger" doc:id="bf1c49f3-0457-4aed-a8fd-b87c8c066e98" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Graph API token request permanent issue',&#10;&quot;errorDescription&quot; :error.description default ''&#10;}]" />
 				</on-error-continue>
 			</error-handler>
 		</try>
@@ -75,7 +75,7 @@ var toMail = Mule::p("graph.toMailbox")
     </ee:transform>
 	
     
-    <logger level="INFO" doc:name="Logger" doc:id="1ddf42ea-7f26-4d83-8a7e-35b69ff93edc" message="#['correlationId: ' ++ vars.correlationId ++ 'Initiated Mail graph api send']"/>
+    <logger level="INFO" doc:name="Logger" doc:id="1ddf42ea-7f26-4d83-8a7e-35b69ff93edc" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Initiated Mail graph api send'&#10;}]"/>
 		<try doc:name="Try" doc:id="aebf156d-5c6b-4122-b1fa-1934b97ac214">
 			<until-successful maxRetries="3" doc:name="Until Successful" doc:id="617f813e-4a1c-4ca8-8275-84eba9e69d52" millisBetweenRetries="6000">
 				<http:request method="POST" config-ref="Graph_API_Request_config" path="/v1.0/users/{mailbox}/sendMail" doc:name="Graph sendMail">
@@ -85,16 +85,16 @@ var toMail = Mule::p("graph.toMailbox")
 		</until-successful>
 			<error-handler>
 				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d30e81fb-8de8-4720-9e3a-dd85cd1d5976" type="HTTP:CONNECTIVITY, HTTP:GATEWAY_TIMEOUT, HTTP:SERVICE_UNAVAILABLE">
-					<logger level="INFO" doc:name="Logger" doc:id="aa3d401f-5970-4aab-bb1c-dbf769fc09b6" message="#['correlationId: ' ++ vars.correlationId ++ 'Graph API send mail connectivity issue' ++ error.description]" />
+					<logger level="INFO" doc:name="Logger" doc:id="aa3d401f-5970-4aab-bb1c-dbf769fc09b6" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Graph API token request connectivity issue',&#10;&quot;errorDescription&quot; :error.description default ''&#10;}]" />
 				</on-error-propagate>
 				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="f291725e-4195-4a6a-86d4-15e8b590f4cf" >
-					<logger level="INFO" doc:name="Logger" doc:id="bdcb9000-46dd-4256-951d-62a019db9f29" message="#['correlationId: ' ++ vars.correlationId ++ 'Graph API send mail  permanent issue' ++ error.description]" />
+					<logger level="INFO" doc:name="Logger" doc:id="bdcb9000-46dd-4256-951d-62a019db9f29" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Graph API token request permanent issue',&#10;&quot;errorDescription&quot; :error.description default ''&#10;}]" />
 				</on-error-continue>
 			</error-handler>
 		</try>
     
     
-		<logger level="INFO" category="graph.mail" message="#['Graph sendMail returned HTTP ' ++ (attributes.statusCode as String)]" doc:name="Log result" />
+		<logger level="INFO" category="graph.mail" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'completed Mail graph api send',&#10;&quot;statusCode&quot;:attributes.statusCode as String default &quot;201&quot;&#10;}]" doc:name="Log result" />
 	</sub-flow>
 
   <!-- ============================================================
