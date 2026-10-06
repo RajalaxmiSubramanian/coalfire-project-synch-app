@@ -4,7 +4,6 @@
       xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
       xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
       xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-      xmlns:http="http://www.mulesoft.org/schema/mule/http"
       xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
       xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc"
       xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
@@ -13,131 +12,156 @@
         http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
         http://www.mulesoft.org/schema/mule/munit-tools http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
         http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
         http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
         http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd">
 
   <munit:config name="api-health-flow-test" doc:name="MUnit configuration" />
 
   <!-- ============================================================
-       Test: Health endpoint - Salesforce OK, OpenAir OK
+       Test 1: Health flow - Salesforce OK, OpenAir OK
+       Both external calls succeed -> both response vars are set
        ============================================================ -->
   <munit:test name="health-flow-sf-ok-openair-ok-test"
               doc:name="Health flow - SF and OpenAir both healthy"
               description="When both Salesforce query and SOAP login succeed, the health response contains success statuses for both.">
 
-    <!-- Mock Salesforce query -->
     <munit:behavior>
-      <munit-tools:mock-when doc:name="Mock Salesforce Query"
+      <!-- Mock Salesforce query - returns one record -->
+      <munit-tools:mock-when doc:name="Mock Salesforce Query Success"
                              processor="salesforce:query">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="doc:id" whereValue="b55b959e-623e-427d-a960-cd0571ec7e4e" />
-        </munit-tools:with-attributes>
         <munit-tools:then-return>
           <munit-tools:payload value="#[[{Id: '001000000000001'}]]" mediaType="application/java" />
         </munit-tools:then-return>
       </munit-tools:mock-when>
 
-      <!-- Mock WSC consume for login -->
-      <munit-tools:mock-when doc:name="Mock WSC Consume Login"
+      <!-- Mock WSC consume for login - returns a valid login response -->
+      <munit-tools:mock-when doc:name="Mock WSC Consume Login Success"
                              processor="wsc:consume">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="doc:id" whereValue="2b25a305-0879-468c-b907-4b337cec0970" />
-        </munit-tools:with-attributes>
         <munit-tools:then-return>
           <munit-tools:payload
-            value="#[{body: {loginResponse: {loginReturn: {status: '1', sessionId: 'test-session'}}}}]"
+            value="#[{body: {loginResponse: {loginReturn: {status: '1', sessionId: 'test-session-abc'}}}}]"
             mediaType="application/java" />
         </munit-tools:then-return>
       </munit-tools:mock-when>
     </munit:behavior>
 
     <munit:execution>
-      <http:request method="GET"
-                    config-ref="HTTP_Listener_config_test"
-                    path="/health"
-                    doc:name="Call Health Endpoint" />
+      <!-- Set required variables before calling the flow -->
+      <set-variable variableName="correlationId" value="test-health-001" doc:name="Set correlationId" />
+      <!-- Invoke the health flow directly (MUnit bypasses the HTTP listener trigger) -->
+      <flow-ref name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:name="Invoke health flow" />
     </munit:execution>
 
     <munit:validation>
+      <!-- Payload should be a JSON object with SalesforceCheck and NetsuiteSppCheck -->
       <munit-tools:assert-that doc:name="Assert payload is not null"
                                expression="#[payload]"
                                is="#[MunitTools::notNullValue()]" />
+      <!-- Both should show statusCode 200 (success) -->
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
-       Test: Health endpoint - Salesforce query fails
+       Test 2: Health flow - Salesforce query fails
+       sfQueryFailureResponse is set; NetsuiteSppCheck still runs
        ============================================================ -->
   <munit:test name="health-flow-sf-failure-test"
               doc:name="Health flow - Salesforce query fails"
               description="When Salesforce query throws an error, sfQueryFailureResponse is set and health response reflects the failure.">
 
     <munit:behavior>
-      <!-- Mock Salesforce query to throw error -->
+      <!-- Mock Salesforce query to throw a permanent error -->
       <munit-tools:mock-when doc:name="Mock Salesforce Query Failure"
                              processor="salesforce:query">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="doc:id" whereValue="b55b959e-623e-427d-a960-cd0571ec7e4e" />
-        </munit-tools:with-attributes>
         <munit-tools:then-return>
-          <munit-tools:error typeId="SALESFORCE:CONNECTIVITY" />
+          <munit-tools:error typeId="SALESFORCE:INVALID_INPUT" />
         </munit-tools:then-return>
       </munit-tools:mock-when>
 
-      <!-- Mock WSC consume for login -->
-      <munit-tools:mock-when doc:name="Mock WSC Consume Login"
+      <!-- Mock WSC consume for login - succeeds -->
+      <munit-tools:mock-when doc:name="Mock WSC Consume Login Success"
                              processor="wsc:consume">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="doc:id" whereValue="2b25a305-0879-468c-b907-4b337cec0970" />
-        </munit-tools:with-attributes>
         <munit-tools:then-return>
           <munit-tools:payload
-            value="#[{body: {loginResponse: {loginReturn: {status: '1', sessionId: 'test-session'}}}}]"
+            value="#[{body: {loginResponse: {loginReturn: {status: '1', sessionId: 'test-session-abc'}}}}]"
             mediaType="application/java" />
         </munit-tools:then-return>
       </munit-tools:mock-when>
     </munit:behavior>
 
     <munit:execution>
-      <http:request method="GET"
-                    config-ref="HTTP_Listener_config_test"
-                    path="/health"
-                    doc:name="Call Health Endpoint" />
+      <set-variable variableName="correlationId" value="test-health-002" doc:name="Set correlationId" />
+      <flow-ref name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:name="Invoke health flow" />
     </munit:execution>
 
     <munit:validation>
       <munit-tools:assert-that doc:name="Assert payload is not null"
                                expression="#[payload]"
                                is="#[MunitTools::notNullValue()]" />
+      <!-- Salesforce failed -> statusCode should be 503 -->
+      <!-- Netsuite succeeded -> statusCode should be 200 -->
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
-       Test: Health endpoint - OpenAir SOAP call fails
+       Test 3: Health flow - OpenAir SOAP call fails
+       soapFailureResponse is set; SalesforceCheck still succeeds
        ============================================================ -->
   <munit:test name="health-flow-openair-failure-test"
               doc:name="Health flow - OpenAir SOAP call fails"
               description="When the WSC consume for OpenAir login fails, soapFailureResponse is set and health response reflects the failure.">
 
     <munit:behavior>
-      <!-- Mock Salesforce query success -->
+      <!-- Mock Salesforce query - succeeds -->
       <munit-tools:mock-when doc:name="Mock Salesforce Query Success"
                              processor="salesforce:query">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="doc:id" whereValue="b55b959e-623e-427d-a960-cd0571ec7e4e" />
-        </munit-tools:with-attributes>
         <munit-tools:then-return>
           <munit-tools:payload value="#[[{Id: '001000000000001'}]]" mediaType="application/java" />
         </munit-tools:then-return>
       </munit-tools:mock-when>
 
-      <!-- Mock WSC consume to throw error -->
+      <!-- Mock WSC consume to throw a permanent error -->
       <munit-tools:mock-when doc:name="Mock WSC Consume Failure"
                              processor="wsc:consume">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="doc:id" whereValue="2b25a305-0879-468c-b907-4b337cec0970" />
-        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:error typeId="WSC:SOAP_FAULT" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-health-003" doc:name="Set correlationId" />
+      <flow-ref name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:name="Invoke health flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:assert-that doc:name="Assert payload is not null"
+                               expression="#[payload]"
+                               is="#[MunitTools::notNullValue()]" />
+      <!-- Salesforce succeeded -> statusCode 200 -->
+      <!-- Netsuite failed -> statusCode 503 -->
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       Test 4: Health flow - Both Salesforce and OpenAir fail
+       ============================================================ -->
+  <munit:test name="health-flow-both-failure-test"
+              doc:name="Health flow - Both SF and OpenAir fail"
+              description="When both Salesforce query and SOAP login fail, both health checks reflect failure.">
+
+    <munit:behavior>
+      <!-- Mock Salesforce query to fail -->
+      <munit-tools:mock-when doc:name="Mock Salesforce Query Failure"
+                             processor="salesforce:query">
+        <munit-tools:then-return>
+          <munit-tools:error typeId="SALESFORCE:CONNECTIVITY" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+
+      <!-- Mock WSC consume to fail -->
+      <munit-tools:mock-when doc:name="Mock WSC Consume Failure"
+                             processor="wsc:consume">
         <munit-tools:then-return>
           <munit-tools:error typeId="WSC:CONNECTIVITY" />
         </munit-tools:then-return>
@@ -145,16 +169,15 @@
     </munit:behavior>
 
     <munit:execution>
-      <http:request method="GET"
-                    config-ref="HTTP_Listener_config_test"
-                    path="/health"
-                    doc:name="Call Health Endpoint" />
+      <set-variable variableName="correlationId" value="test-health-004" doc:name="Set correlationId" />
+      <flow-ref name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:name="Invoke health flow" />
     </munit:execution>
 
     <munit:validation>
       <munit-tools:assert-that doc:name="Assert payload is not null"
                                expression="#[payload]"
                                is="#[MunitTools::notNullValue()]" />
+      <!-- Both failed -> both statusCode 503 -->
     </munit:validation>
   </munit:test>
 

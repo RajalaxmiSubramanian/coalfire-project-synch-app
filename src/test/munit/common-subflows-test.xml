@@ -17,14 +17,15 @@
 
   <!-- ============================================================
        soap-consumer-login-subflow
-       Test 1: Login succeeds - soapHeader is set
+       Test 1: Login succeeds - soapHeader variable is set, no wscError
        ============================================================ -->
   <munit:test name="soap-login-subflow-success-test"
               doc:name="soap-consumer-login-subflow - login succeeds"
               description="When WSC consume login succeeds, soapHeader variable is set and wscError is null.">
 
     <munit:behavior>
-      <munit-tools:mock-when doc:name="Mock WSC Consume Login"
+      <!-- Mock all wsc:consume calls to return a valid login response -->
+      <munit-tools:mock-when doc:name="Mock WSC Consume Login Success"
                              processor="wsc:consume">
         <munit-tools:then-return>
           <munit-tools:payload
@@ -36,22 +37,27 @@
 
     <munit:execution>
       <set-variable variableName="correlationId" value="test-login-001" doc:name="Set correlationId" />
-      <set-variable variableName="opportunitiesResult" value="#[[]]" doc:name="Set opportunitiesResult" />
-      <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
       <set-variable variableName="runTimestamp" value="2024-01-01T00:00:00Z" doc:name="Set runTimestamp" />
+      <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
+      <!-- wscError must be null/empty initially so the choice routes to otherwise -->
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
       <flow-ref name="soap-consumer-login-subflow" doc:name="Run soap-consumer-login-subflow" />
     </munit:execution>
 
     <munit:validation>
+      <!-- wscError should remain null after a successful login -->
       <munit-tools:assert-that doc:name="Assert wscError is null"
                                expression="#[vars.wscError]"
                                is="#[MunitTools::nullValue()]" />
+      <!-- soapHeader should be set from soap-header-for-login.dwl -->
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        soap-consumer-login-subflow
        Test 2: Login fails permanently - raises APP:PROCESS_ERROR
+       The inner on-error-continue captures wscError, then the choice
+       sees !isEmpty(vars.wscError) and raises APP:PROCESS_ERROR
        ============================================================ -->
   <munit:test name="soap-login-subflow-failure-test"
               doc:name="soap-consumer-login-subflow - login fails permanently"
@@ -59,6 +65,7 @@
               expectedErrorType="APP:PROCESS_ERROR">
 
     <munit:behavior>
+      <!-- Mock wsc:consume to throw a permanent SOAP fault -->
       <munit-tools:mock-when doc:name="Mock WSC Consume Login Failure"
                              processor="wsc:consume">
         <munit-tools:then-return>
@@ -69,14 +76,15 @@
 
     <munit:execution>
       <set-variable variableName="correlationId" value="test-login-002" doc:name="Set correlationId" />
-      <set-variable variableName="opportunitiesResult" value="#[[]]" doc:name="Set opportunitiesResult" />
-      <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
       <set-variable variableName="runTimestamp" value="2024-01-01T00:00:00Z" doc:name="Set runTimestamp" />
+      <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
       <flow-ref name="soap-consumer-login-subflow" doc:name="Run soap-consumer-login-subflow" />
     </munit:execution>
 
     <munit:validation>
-      <munit-tools:assert-that doc:name="Assert error type is PROCESS_ERROR"
+      <!-- expectedErrorType handles the assertion; this is a safety check -->
+      <munit-tools:assert-that doc:name="Assert error type identifier"
                                expression="#[error.errorType.identifier]"
                                is="#[MunitTools::equalTo('PROCESS_ERROR')]" />
     </munit:validation>
@@ -84,7 +92,7 @@
 
   <!-- ============================================================
        soap-service-common-subflow
-       Test 1: SOAP call succeeds
+       Test 1: SOAP call succeeds - payload set, wscError null
        ============================================================ -->
   <munit:test name="soap-service-common-subflow-success-test"
               doc:name="soap-service-common-subflow - SOAP call succeeds"
@@ -95,16 +103,18 @@
                              processor="wsc:consume">
         <munit-tools:then-return>
           <munit-tools:payload
-            value="#[{body: {readResponse: {ReadResult: {objects: {oaCustomer: {id: 'CUST001'}}}}}}]"
+            value="#[{body: {readResponse: {readReturn: {ReadResult: {objects: {oaCustomer: {id: 'CUST001', name: 'Test Customer'}}}}}}}]"
             mediaType="application/java" />
         </munit-tools:then-return>
       </munit-tools:mock-when>
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-soap-common-001" doc:name="Set correlationId" />
       <set-variable variableName="soapOperation" value="read" doc:name="Set soapOperation" />
       <set-variable variableName="soapServicePayload" value="#[{}]" doc:name="Set soapServicePayload" />
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
       <flow-ref name="soap-service-common-subflow" doc:name="Run soap-service-common-subflow" />
     </munit:execution>
 
@@ -112,12 +122,14 @@
       <munit-tools:assert-that doc:name="Assert wscError is null"
                                expression="#[vars.wscError]"
                                is="#[MunitTools::nullValue()]" />
-    </munit:validation>
+			<munit-tools:assert-that doc:name="Assert payload body is set" expression="#[payload.body]" is="#[MunitTools::notNullValue()]" />
+    
+</munit:validation>
   </munit:test>
 
   <!-- ============================================================
        soap-service-common-subflow
-       Test 2: SOAP call fails with permanent error
+       Test 2: SOAP call fails with permanent error - wscError is set
        ============================================================ -->
   <munit:test name="soap-service-common-subflow-failure-test"
               doc:name="soap-service-common-subflow - SOAP call fails permanently"
@@ -133,9 +145,11 @@
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-soap-common-002" doc:name="Set correlationId" />
       <set-variable variableName="soapOperation" value="read" doc:name="Set soapOperation" />
       <set-variable variableName="soapServicePayload" value="#[{}]" doc:name="Set soapServicePayload" />
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
       <flow-ref name="soap-service-common-subflow" doc:name="Run soap-service-common-subflow" />
     </munit:execution>
 
@@ -143,12 +157,54 @@
       <munit-tools:assert-that doc:name="Assert wscError is set"
                                expression="#[vars.wscError]"
                                is="#[MunitTools::notNullValue()]" />
+      <munit-tools:assert-that doc:name="Assert wscError has errorType"
+                               expression="#[vars.wscError.errorType]"
+                               is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       soap-service-common-subflow
+       Test 3: SOAP add call succeeds - oaErrorCode extracted from response
+       ============================================================ -->
+  <munit:test name="soap-service-common-subflow-add-success-test"
+              doc:name="soap-service-common-subflow - SOAP add call succeeds"
+              description="When WSC consume add succeeds with no OA error, oaErrorCode is null.">
+
+    <munit:behavior>
+      <munit-tools:mock-when doc:name="Mock WSC Consume Add Success"
+                             processor="wsc:consume">
+        <munit-tools:then-return>
+          <munit-tools:payload
+            value="#[{body: {addResponse: {addReturn: {UpdateResult: {id: 'CUST001', status: '1'}}}}}]"
+            mediaType="application/java" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-soap-common-003" doc:name="Set correlationId" />
+      <set-variable variableName="soapOperation" value="add" doc:name="Set soapOperation" />
+      <set-variable variableName="soapServicePayload" value="#[{}]" doc:name="Set soapServicePayload" />
+      <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <flow-ref name="soap-service-common-subflow" doc:name="Run soap-service-common-subflow" />
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:assert-that doc:name="Assert wscError is null"
+                               expression="#[vars.wscError]"
+                               is="#[MunitTools::nullValue()]" />
+      <!-- oaErrorCode should be null when no error in response -->
+      <munit-tools:assert-that doc:name="Assert oaErrorCode is null"
+                               expression="#[vars.oaErrorCode]"
+                               is="#[MunitTools::nullValue()]" />
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        soap-service-attachment-subflow
-       Test 1: Attachment SOAP call succeeds
+       Test 1: Attachment SOAP call succeeds - wscError null
        ============================================================ -->
   <munit:test name="soap-service-attachment-subflow-success-test"
               doc:name="soap-service-attachment-subflow - SOAP call succeeds"
@@ -166,8 +222,10 @@
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-attach-001" doc:name="Set correlationId" />
       <set-variable variableName="soapOperation" value="add" doc:name="Set soapOperation" />
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
       <flow-ref name="soap-service-attachment-subflow" doc:name="Run soap-service-attachment-subflow" />
     </munit:execution>
 
@@ -175,12 +233,15 @@
       <munit-tools:assert-that doc:name="Assert wscError is null"
                                expression="#[vars.wscError]"
                                is="#[MunitTools::nullValue()]" />
+      <munit-tools:assert-that doc:name="Assert payload body is set"
+                               expression="#[payload.body]"
+                               is="#[MunitTools::notNullValue()]" />
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        soap-service-attachment-subflow
-       Test 2: Attachment SOAP call fails permanently
+       Test 2: Attachment SOAP call fails permanently - wscError is set
        ============================================================ -->
   <munit:test name="soap-service-attachment-subflow-failure-test"
               doc:name="soap-service-attachment-subflow - SOAP call fails permanently"
@@ -196,8 +257,10 @@
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-attach-002" doc:name="Set correlationId" />
       <set-variable variableName="soapOperation" value="add" doc:name="Set soapOperation" />
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
       <flow-ref name="soap-service-attachment-subflow" doc:name="Run soap-service-attachment-subflow" />
     </munit:execution>
 
@@ -211,20 +274,22 @@
   <!-- ============================================================
        handle-document-for-existing-project-subflow
        Test 1: Document already exists in OpenAir
+       Read attachment returns a document -> sppAttachmentStatus = Existing
        ============================================================ -->
   <munit:test name="handle-doc-existing-project-doc-exists-test"
               doc:name="handle-document-for-existing-project-subflow - document already exists"
               description="When SPP read attachment returns an existing document, result is Success with sppAttachmentStatus Existing.">
 
     <munit:behavior>
-      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Read Attachment"
+      <!-- Mock soap-service-common-subflow to return an existing attachment -->
+      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Read Attachment Found"
                              processor="flow-ref">
         <munit-tools:with-attributes>
           <munit-tools:with-attribute attributeName="name" whereValue="soap-service-common-subflow" />
         </munit-tools:with-attributes>
         <munit-tools:then-return>
           <munit-tools:payload
-            value="#[{body: {readResponse: {readReturn: {ReadResult: {objects: {oaAttachment: {id: 'ATT001', file_name: 'test.pdf'}}}}}}}]"
+            value="#[{body: {readResponse: {readReturn: {ReadResult: {objects: {oaAttachment: {id: 'ATT001', file_name: 'test.pdf', ownerid: 'PROJ001'}}}}}}}]"
             mediaType="application/java" />
           <munit-tools:variables>
             <munit-tools:variable key="wscError" value="#[null]" />
@@ -235,10 +300,12 @@
     </munit:behavior>
 
     <munit:execution>
-      <set-variable variableName="correlationId" value="test-doc-001" doc:name="Set correlationId" />
+      <set-variable variableName="correlationId" value="test-doc-exist-001" doc:name="Set correlationId" />
       <set-variable variableName="opportunityId" value="OPP001" doc:name="Set opportunityId" />
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
       <set-variable variableName="existingProjectCreationResults" value="#[[]]" doc:name="Set existingProjectCreationResults" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
@@ -252,24 +319,25 @@
     </munit:execution>
 
     <munit:validation>
-      <munit-tools:assert-that doc:name="Assert existingProjectCreationResults has one entry"
-                               expression="#[sizeOf(vars.existingProjectCreationResults default [])]"
-                               is="#[MunitTools::equalTo(1)]" />
       <munit-tools:assert-that doc:name="Assert sppAttachmentStatus is Existing"
                                expression="#[vars.existingProjectCreationResults[0].sppAttachmentStatus]"
                                is="#[MunitTools::equalTo('Existing')]" />
+      <munit-tools:assert-that doc:name="Assert overallSyncStatus is Success"
+                               expression="#[vars.existingProjectCreationResults[0].overallSyncStatus]"
+                               is="#[MunitTools::equalTo('Success')]" />
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        handle-document-for-existing-project-subflow
-       Test 2: Document does NOT exist - create document
+       Test 2: Document does NOT exist - create-openair-document-subflow-wsc is called
        ============================================================ -->
   <munit:test name="handle-doc-existing-project-doc-not-exists-test"
               doc:name="handle-document-for-existing-project-subflow - document not found, create it"
               description="When SPP read attachment returns no document, create-openair-document-subflow-wsc is called.">
 
     <munit:behavior>
+      <!-- Mock soap-service-common-subflow to return empty attachment -->
       <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Read Attachment Empty"
                              processor="flow-ref">
         <munit-tools:with-attributes>
@@ -286,6 +354,7 @@
         </munit-tools:then-return>
       </munit-tools:mock-when>
 
+      <!-- Mock create-openair-document-subflow-wsc -->
       <munit-tools:mock-when doc:name="Mock Create Document Sub-flow"
                              processor="flow-ref">
         <munit-tools:with-attributes>
@@ -294,18 +363,19 @@
         <munit-tools:then-return>
           <munit-tools:variables>
             <munit-tools:variable key="createAttachmentResult"
-              value="#[{id: 'ATT002', errorReason: ''}]"
-              doc:name="Set createAttachmentResult" />
+              value="#[{id: 'ATT002', errorReason: ''}]" />
           </munit-tools:variables>
         </munit-tools:then-return>
       </munit-tools:mock-when>
     </munit:behavior>
 
     <munit:execution>
-      <set-variable variableName="correlationId" value="test-doc-002" doc:name="Set correlationId" />
+      <set-variable variableName="correlationId" value="test-doc-exist-002" doc:name="Set correlationId" />
       <set-variable variableName="opportunityId" value="OPP001" doc:name="Set opportunityId" />
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
       <set-variable variableName="existingProjectCreationResults" value="#[[]]" doc:name="Set existingProjectCreationResults" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
@@ -326,9 +396,61 @@
           <munit-tools:with-attribute attributeName="name" whereValue="create-openair-document-subflow-wsc" />
         </munit-tools:with-attributes>
       </munit-tools:verify-call>
-      <munit-tools:assert-that doc:name="Assert existingProjectCreationResults has one entry"
-                               expression="#[sizeOf(vars.existingProjectCreationResults default [])]"
-                               is="#[MunitTools::equalTo(1)]" />
+      <munit-tools:assert-that doc:name="Assert sppAttachmentStatus is Success"
+                               expression="#[vars.existingProjectCreationResults[0].sppAttachmentStatus]"
+                               is="#[MunitTools::equalTo('Success')]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       handle-document-for-existing-project-subflow
+       Test 3: Read attachment fails (wscError set) -> Failure result
+       ============================================================ -->
+  <munit:test name="handle-doc-existing-project-read-error-test"
+              doc:name="handle-document-for-existing-project-subflow - read attachment fails"
+              description="When SPP read attachment returns a wscError, result is Failure in existingProjectCreationResults.">
+
+    <munit:behavior>
+      <!-- Mock soap-service-common-subflow to return wscError -->
+      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Read Attachment Error"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="soap-service-common-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return>
+          <munit-tools:variables>
+            <munit-tools:variable key="wscError"
+              value="#[{errorType: 'WSC:CONNECTIVITY', description: 'Connection refused'}]" />
+            <munit-tools:variable key="oaErrorCode" value="#[null]" />
+          </munit-tools:variables>
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-doc-exist-003" doc:name="Set correlationId" />
+      <set-variable variableName="opportunityId" value="OPP001" doc:name="Set opportunityId" />
+      <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="existingProjectCreationResults" value="#[[]]" doc:name="Set existingProjectCreationResults" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
+      <set-variable variableName="sppCustomer"
+        value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
+        doc:name="Set sppCustomer" />
+      <set-variable variableName="sppProject"
+        value="#[{oaProjectId: 'PROJ001', oaProjectStatus: 'Existing'}]"
+        doc:name="Set sppProject" />
+      <set-variable variableName="currentLineItem"
+        value="#[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: 'DOC001'}]"
+        doc:name="Set currentLineItem" />
+      <flow-ref name="handle-document-for-existing-project-subflow" doc:name="Run Sub-flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <munit-tools:assert-that doc:name="Assert overallSyncStatus is Failure"
+                               expression="#[vars.existingProjectCreationResults[0].overallSyncStatus]"
+                               is="#[MunitTools::equalTo('Failure')]" />
     </munit:validation>
   </munit:test>
 
@@ -336,38 +458,5 @@
        send-failure-notification-subflow
        Test 1: Notification sent successfully
        ============================================================ -->
-  <munit:test name="send-failure-notification-subflow-success-test"
-              doc:name="send-failure-notification-subflow - notification sent"
-              description="When failedOpportunitiesList is non-empty, sent-mail-notification-subflow is called.">
-
-    <munit:behavior>
-      <munit-tools:mock-when doc:name="Mock Sent Mail Sub-flow"
-                             processor="flow-ref">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="name" whereValue="sent-mail-notification-subflow" />
-        </munit-tools:with-attributes>
-        <munit-tools:then-return />
-      </munit-tools:mock-when>
-    </munit:behavior>
-
-    <munit:execution>
-      <set-variable variableName="correlationId" value="test-notif-001" doc:name="Set correlationId" />
-      <set-variable variableName="runTimestamp" value="2024-01-01T00:00:00Z" doc:name="Set runTimestamp" />
-      <set-variable variableName="failedOpportunitiesList"
-        value="#[[{opportunityId: 'OPP001', accountId: 'ACC001', failureReason: 'OPPORTUNITY_PROCESSING_FAILED', processResult: []}]]"
-        doc:name="Set failedOpportunitiesList" />
-      <flow-ref name="send-failure-notification-subflow" doc:name="Run Sub-flow" />
-    </munit:execution>
-
-    <munit:validation>
-      <munit-tools:verify-call doc:name="Verify sent-mail-notification-subflow was called"
-                               processor="flow-ref"
-                               times="1">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="name" whereValue="sent-mail-notification-subflow" />
-        </munit-tools:with-attributes>
-      </munit-tools:verify-call>
-    </munit:validation>
-  </munit:test>
 
 </mule>

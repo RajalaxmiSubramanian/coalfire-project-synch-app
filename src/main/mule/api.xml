@@ -11,23 +11,7 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
 http://www.mulesoft.org/schema/mule/openair http://www.mulesoft.org/schema/mule/openair/current/mule-openair.xsd
 http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd">
-<!--   <http:listener-config name="HTTPS_Listener_config" doc:name="HTTP Listener config">
-    <http:listener-connection host="0.0.0.0" port="8082" />
-  </http:listener-config> -->
-<!--   <apikit:config name="sf-spp-opportunity-synch-app-apikit-config" raml="api.raml" outboundHeadersMapName="outboundHeaders" httpStatusVarName="httpStatus" doc:name="APIKit Router Config" />
- -->
-<!--   <flow name="sf-spp-opportunity-synch-app-api-main" doc:name="sf-spp-opportunity-synch-app API Main" doc:id="091941d7-6007-49a5-1dd6-44197620d45c">
-    <http:listener path="/api/${api.majorVersion}/*" config-ref="HTTPS_Listener_config" doc:name="HTTP Listener" doc:id="c0200133-26ab-2481-b2a2-ea7f2cf8b80e">
-      <http:response statusCode="#[vars.httpStatus default 200]">
-        <http:headers>#[(vars.outboundHeaders default {}) ++ {'X-Correlation-Id': vars.correlationId default ''}]</http:headers>
-      </http:response>
-      <http:error-response statusCode="#[vars.httpStatus default 500]">
-        <http:body>#[payload]</http:body>
-        <http:headers>#[(vars.outboundHeaders default {}) ++ {'X-Correlation-Id': vars.correlationId default ''}]</http:headers>
-      </http:error-response>
-    </http:listener>
-    <apikit:router config-ref="sf-spp-opportunity-synch-app-apikit-config" doc:name="APIKit Router" doc:id="04a936b8-7306-792c-0483-11c020d8df10" />
-  </flow> -->
+
 
   <flow name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:name="get:\health:sf-spp-opportunity-synch-app-apikit-config" doc:id="3f7f1a54-e573-f395-ca24-7065d093a8cb">
     <http:listener doc:name="Listener" doc:id="83b003dd-8dbb-4cfe-9e8f-090483be07b1" config-ref="HTTP_Listener_config_test" path="/health"/>

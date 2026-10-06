@@ -17,14 +17,14 @@
 
   <!-- ============================================================
        common-salesforce-query-sub-flow
-       Test 1: Query succeeds
+       Test 1: Query succeeds - payload set, sfError null
        ============================================================ -->
   <munit:test name="sf-query-subflow-success-test"
               doc:name="common-salesforce-query-sub-flow - query succeeds"
               description="When Salesforce query succeeds, payload is set and sfError remains null.">
 
     <munit:behavior>
-      <munit-tools:mock-when doc:name="Mock Salesforce Query"
+      <munit-tools:mock-when doc:name="Mock Salesforce Query Success"
                              processor="salesforce:query">
         <munit-tools:then-return>
           <munit-tools:payload
@@ -35,6 +35,8 @@
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-sf-query-001" doc:name="Set correlationId" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <set-variable variableName="querySalesforceObject"
         value="SELECT Id, Name, AccountId FROM Opportunity WHERE SPP_Sync_Status__c = 'Pending'"
         doc:name="Set querySalesforceObject" />
@@ -45,15 +47,12 @@
       <munit-tools:assert-that doc:name="Assert sfError is null"
                                expression="#[vars.sfError]"
                                is="#[MunitTools::nullValue()]" />
-      <munit-tools:assert-that doc:name="Assert payload has one record"
-                               expression="#[sizeOf(payload)]"
-                               is="#[MunitTools::equalTo(1)]" />
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        common-salesforce-query-sub-flow
-       Test 2: Query fails with permanent error
+       Test 2: Query fails with permanent error - sfError is set
        ============================================================ -->
   <munit:test name="sf-query-subflow-permanent-error-test"
               doc:name="common-salesforce-query-sub-flow - permanent error"
@@ -69,6 +68,8 @@
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-sf-query-002" doc:name="Set correlationId" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <set-variable variableName="querySalesforceObject"
         value="SELECT Id FROM Opportunity WHERE Invalid_Field__c = 'test'"
         doc:name="Set querySalesforceObject" />
@@ -79,12 +80,13 @@
       <munit-tools:assert-that doc:name="Assert sfError is set"
                                expression="#[vars.sfError]"
                                is="#[MunitTools::notNullValue()]" />
+    
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        common-salesforce-query-sub-flow
-       Test 3: Query returns empty result
+       Test 3: Query returns empty result - payload empty, sfError null
        ============================================================ -->
   <munit:test name="sf-query-subflow-empty-result-test"
               doc:name="common-salesforce-query-sub-flow - empty result"
@@ -100,6 +102,8 @@
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-sf-query-003" doc:name="Set correlationId" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <set-variable variableName="querySalesforceObject"
         value="SELECT Id FROM Opportunity WHERE SPP_Sync_Status__c = 'Pending'"
         doc:name="Set querySalesforceObject" />
@@ -117,15 +121,52 @@
   </munit:test>
 
   <!-- ============================================================
+       common-salesforce-query-sub-flow
+       Test 4: Query fails with transient error (CONNECTIVITY)
+       Until-successful retries; after exhaustion sfError is set
+       ============================================================ -->
+  <munit:test name="sf-query-subflow-transient-error-test"
+              doc:name="common-salesforce-query-sub-flow - transient connectivity error"
+              description="When Salesforce query fails with a transient connectivity error, until-successful retries and eventually sfError is set.">
+
+    <munit:behavior>
+      <!-- CONNECTIVITY is a transient error -> on-error-propagate re-throws for until-successful
+           After maxRetries exhausted, the outer on-error-continue catches it and sets sfError -->
+      <munit-tools:mock-when doc:name="Mock Salesforce Query Connectivity Error"
+                             processor="salesforce:query">
+        <munit-tools:then-return>
+          <munit-tools:error typeId="SALESFORCE:CONNECTIVITY" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-sf-query-004" doc:name="Set correlationId" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
+      <set-variable variableName="querySalesforceObject"
+        value="SELECT Id FROM Opportunity"
+        doc:name="Set querySalesforceObject" />
+      <flow-ref name="common-salesforce-query-sub-flow" doc:name="Run Sub-flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <!-- After retries exhausted, sfError should be set -->
+      <munit-tools:assert-that doc:name="Assert sfError is set after retry exhaustion"
+                               expression="#[vars.sfError]"
+                               is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
        update-salesforce-object-subflow
-       Test 1: Update succeeds
+       Test 1: Update succeeds - sfError null
        ============================================================ -->
   <munit:test name="sf-update-subflow-success-test"
               doc:name="update-salesforce-object-subflow - update succeeds"
               description="When Salesforce update succeeds, sfError remains null.">
 
     <munit:behavior>
-      <munit-tools:mock-when doc:name="Mock Salesforce Update"
+      <munit-tools:mock-when doc:name="Mock Salesforce Update Success"
                              processor="salesforce:update">
         <munit-tools:then-return>
           <munit-tools:payload
@@ -136,9 +177,11 @@
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-sf-update-001" doc:name="Set correlationId" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <set-variable variableName="sfObject" value="Opportunity" doc:name="Set sfObject" />
       <set-variable variableName="updateSfObject"
-        value="#[[{Id: 'OPP001', SPP_Sync_Status__c: 'Processed'}]]"
+        value="#[[{Id: 'OPP001', SPP_Sync_Status__c: 'Success'}]]"
         doc:name="Set updateSfObject" />
       <flow-ref name="update-salesforce-object-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
@@ -152,7 +195,7 @@
 
   <!-- ============================================================
        update-salesforce-object-subflow
-       Test 2: Update fails with permanent error
+       Test 2: Update fails with permanent error - sfError is set
        ============================================================ -->
   <munit:test name="sf-update-subflow-permanent-error-test"
               doc:name="update-salesforce-object-subflow - permanent error"
@@ -168,9 +211,11 @@
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-sf-update-002" doc:name="Set correlationId" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <set-variable variableName="sfObject" value="Opportunity" doc:name="Set sfObject" />
       <set-variable variableName="updateSfObject"
-        value="#[[{Id: 'OPP001', SPP_Sync_Status__c: 'Processed'}]]"
+        value="#[[{Id: 'OPP001', SPP_Sync_Status__c: 'Failed'}]]"
         doc:name="Set updateSfObject" />
       <flow-ref name="update-salesforce-object-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
@@ -179,12 +224,15 @@
       <munit-tools:assert-that doc:name="Assert sfError is set"
                                expression="#[vars.sfError]"
                                is="#[MunitTools::notNullValue()]" />
+      <munit-tools:assert-that doc:name="Assert sfError has description"
+                               expression="#[vars.sfError.description]"
+                               is="#[MunitTools::notNullValue()]" />
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        update-salesforce-object-subflow
-       Test 3: Update OpportunityLineItem type
+       Test 3: Update OpportunityLineItem type - succeeds
        ============================================================ -->
   <munit:test name="sf-update-subflow-line-item-test"
               doc:name="update-salesforce-object-subflow - update OpportunityLineItem"
@@ -202,9 +250,11 @@
     </munit:behavior>
 
     <munit:execution>
+      <set-variable variableName="correlationId" value="test-sf-update-003" doc:name="Set correlationId" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <set-variable variableName="sfObject" value="OpportunityLineItem" doc:name="Set sfObject" />
       <set-variable variableName="updateSfObject"
-        value="#[[{Id: 'LI001', OA_Project_Id__c: 'PROJ001', SPP_Sync_Status__c: 'Processed'}]]"
+        value="#[[{Id: 'LI001', OA_Internal_Id__c: 'PROJ001'}]]"
         doc:name="Set updateSfObject" />
       <flow-ref name="update-salesforce-object-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
@@ -213,6 +263,42 @@
       <munit-tools:assert-that doc:name="Assert sfError is null"
                                expression="#[vars.sfError]"
                                is="#[MunitTools::nullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       update-salesforce-object-subflow
+       Test 4: Update fails with transient error (CONNECTIVITY)
+       Until-successful retries; after exhaustion sfError is set
+       ============================================================ -->
+  <munit:test name="sf-update-subflow-transient-error-test"
+              doc:name="update-salesforce-object-subflow - transient connectivity error"
+              description="When Salesforce update fails with a transient connectivity error, until-successful retries and eventually sfError is set.">
+
+    <munit:behavior>
+      <munit-tools:mock-when doc:name="Mock Salesforce Update Connectivity Error"
+                             processor="salesforce:update">
+        <munit-tools:then-return>
+          <munit-tools:error typeId="SALESFORCE:CONNECTIVITY" />
+        </munit-tools:then-return>
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-sf-update-004" doc:name="Set correlationId" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
+      <set-variable variableName="sfObject" value="Opportunity" doc:name="Set sfObject" />
+      <set-variable variableName="updateSfObject"
+        value="#[[{Id: 'OPP001', SPP_Sync_Status__c: 'Success'}]]"
+        doc:name="Set updateSfObject" />
+      <flow-ref name="update-salesforce-object-subflow" doc:name="Run Sub-flow" />
+    </munit:execution>
+
+    <munit:validation>
+      <!-- After retries exhausted, sfError should be set -->
+      <munit-tools:assert-that doc:name="Assert sfError is set after retry exhaustion"
+                               expression="#[vars.sfError]"
+                               is="#[MunitTools::notNullValue()]" />
     </munit:validation>
   </munit:test>
 

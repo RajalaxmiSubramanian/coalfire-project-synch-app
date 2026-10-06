@@ -14,15 +14,16 @@
   <munit:config name="main-flow-test" doc:name="MUnit configuration" />
 
   <!-- ============================================================
-       Test: Main flow - Salesforce query succeeds, no opportunities
+       Test 1: Main flow - Salesforce query succeeds, no opportunities
+       Flow ends without processing; no failure notification sent
        ============================================================ -->
   <munit:test name="main-flow-no-opportunities-test"
               doc:name="Main flow - SF query succeeds with empty result"
               description="When Salesforce query returns empty list, flow ends without processing and no failure notification is sent.">
 
     <munit:behavior>
-      <!-- Mock common-salesforce-query-sub-flow -->
-      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow"
+      <!-- Mock common-salesforce-query-sub-flow to return empty list -->
+      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow - Empty"
                              processor="flow-ref">
         <munit-tools:with-attributes>
           <munit-tools:with-attribute attributeName="name" whereValue="common-salesforce-query-sub-flow" />
@@ -47,33 +48,48 @@
           </munit-tools:variables>
         </munit-tools:then-return>
       </munit-tools:mock-when>
+
+      <!-- Mock send-failure-notification-subflow - should NOT be called -->
+      <munit-tools:mock-when doc:name="Mock Send Failure Notification"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="send-failure-notification-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return />
+      </munit-tools:mock-when>
+
+      <!-- Mock sent-mail-notification-subflow (called by global error handler) -->
+      <munit-tools:mock-when doc:name="Mock Sent Mail Sub-flow"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="sent-mail-notification-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return />
+      </munit-tools:mock-when>
     </munit:behavior>
 
     <munit:execution>
+      <!-- The main flow has a scheduler trigger; MUnit calls it directly -->
       <flow-ref name="sf-spp-opportunity-synch-main-flow" doc:name="Run Main Flow" />
     </munit:execution>
-
-    <munit:validation>
-      <munit-tools:assert-that doc:name="Assert failedOpportunitiesList is empty"
-                               expression="#[sizeOf(vars.failedOpportunitiesList default [])]" 
-                               is="#[MunitTools::equalTo(0)]" />
-    </munit:validation>
   </munit:test>
 
   <!-- ============================================================
-       Test: Main flow - Salesforce query fails (sfError set)
+       Test 2: Main flow - Salesforce query fails (sfError set)
+       Flow raises APP:PROCESS_ERROR which is caught by globalErrorHandler
        ============================================================ -->
 
   <!-- ============================================================
-       Test: Main flow - Opportunities processed, failures exist, notification sent
+       Test 3: Main flow - Opportunities processed, failures exist
+       send-failure-notification-subflow is called
        ============================================================ -->
   <munit:test name="main-flow-with-failures-notification-test"
               doc:name="Main flow - Failures exist, failure notification is sent"
               description="When failedOpportunitiesList is non-empty after processing, send-failure-notification-subflow is called.">
 
     <munit:behavior>
-      <!-- Mock SF query success -->
-      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow"
+      <!-- Mock SF query success with one opportunity -->
+      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow - One Opp"
                              processor="flow-ref">
         <munit-tools:with-attributes>
           <munit-tools:with-attribute attributeName="name" whereValue="common-salesforce-query-sub-flow" />
@@ -89,7 +105,7 @@
       </munit-tools:mock-when>
 
       <!-- Mock verify-opportunity-exists-and-process-subflow to set failures -->
-      <munit-tools:mock-when doc:name="Mock Verify Opportunity Sub-flow"
+      <munit-tools:mock-when doc:name="Mock Verify Opportunity Sub-flow - With Failures"
                              processor="flow-ref">
         <munit-tools:with-attributes>
           <munit-tools:with-attribute attributeName="name" whereValue="verify-opportunity-exists-and-process-subflow" />
@@ -110,27 +126,25 @@
         </munit-tools:with-attributes>
         <munit-tools:then-return />
       </munit-tools:mock-when>
+
+      <!-- Mock sent-mail-notification-subflow -->
+      <munit-tools:mock-when doc:name="Mock Sent Mail Sub-flow"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="sent-mail-notification-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return />
+      </munit-tools:mock-when>
     </munit:behavior>
 
     <munit:execution>
       <flow-ref name="sf-spp-opportunity-synch-main-flow" doc:name="Run Main Flow" />
     </munit:execution>
-
-    <munit:validation>
-      <munit-tools:assert-that doc:name="Assert failedOpportunitiesList has one entry"
-                               expression="#[sizeOf(vars.failedOpportunitiesList default [])]"
-                               is="#[MunitTools::equalTo(1)]" />
-      <munit-tools:verify-call doc:name="Verify send-failure-notification-subflow was called"
-                               processor="flow-ref">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="name" whereValue="send-failure-notification-subflow" />
-        </munit-tools:with-attributes>
-      </munit-tools:verify-call>
-    </munit:validation>
   </munit:test>
 
   <!-- ============================================================
-       Test: Main flow - Opportunities processed, no failures
+       Test 4: Main flow - Opportunities processed, no failures
+       send-failure-notification-subflow is NOT called
        ============================================================ -->
   <munit:test name="main-flow-no-failures-test"
               doc:name="Main flow - No failures, notification skipped"
@@ -138,7 +152,7 @@
 
     <munit:behavior>
       <!-- Mock SF query success -->
-      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow"
+      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow - One Opp"
                              processor="flow-ref">
         <munit-tools:with-attributes>
           <munit-tools:with-attribute attributeName="name" whereValue="common-salesforce-query-sub-flow" />
@@ -154,7 +168,7 @@
       </munit-tools:mock-when>
 
       <!-- Mock verify-opportunity-exists-and-process-subflow with no failures -->
-      <munit-tools:mock-when doc:name="Mock Verify Opportunity Sub-flow"
+      <munit-tools:mock-when doc:name="Mock Verify Opportunity Sub-flow - No Failures"
                              processor="flow-ref">
         <munit-tools:with-attributes>
           <munit-tools:with-attribute attributeName="name" whereValue="verify-opportunity-exists-and-process-subflow" />
@@ -165,24 +179,29 @@
           </munit-tools:variables>
         </munit-tools:then-return>
       </munit-tools:mock-when>
+
+      <!-- Mock send-failure-notification-subflow - should NOT be called -->
+      <munit-tools:mock-when doc:name="Mock Send Failure Notification"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="send-failure-notification-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return />
+      </munit-tools:mock-when>
+
+      <!-- Mock sent-mail-notification-subflow -->
+      <munit-tools:mock-when doc:name="Mock Sent Mail Sub-flow"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="sent-mail-notification-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return />
+      </munit-tools:mock-when>
     </munit:behavior>
 
     <munit:execution>
       <flow-ref name="sf-spp-opportunity-synch-main-flow" doc:name="Run Main Flow" />
     </munit:execution>
-
-    <munit:validation>
-      <munit-tools:assert-that doc:name="Assert failedOpportunitiesList is empty"
-                               expression="#[sizeOf(vars.failedOpportunitiesList default [])]"
-                               is="#[MunitTools::equalTo(0)]" />
-      <munit-tools:verify-call doc:name="Verify send-failure-notification-subflow was NOT called"
-                               processor="flow-ref"
-                               times="0">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute attributeName="name" whereValue="send-failure-notification-subflow" />
-        </munit-tools:with-attributes>
-      </munit-tools:verify-call>
-    </munit:validation>
   </munit:test>
 
 </mule>

@@ -15,11 +15,14 @@
 
   <!-- ============================================================
        salesforce-writeback
-       Test 1: All projects succeeded - Opportunity marked Processed
+       Test 1: All projects succeeded - Opportunity marked Success
+       update-salesforce-object-subflow called twice:
+         1st: for OpportunityLineItem updates
+         2nd: for Opportunity status update
        ============================================================ -->
   <munit:test name="salesforce-writeback-all-success-test"
               doc:name="salesforce-writeback - all projects succeeded"
-              description="When all combinedLineItemResults are Success, Opportunity is updated to Processed.">
+              description="When all combinedLineItemResults are Success, update-salesforce-object-subflow is called twice and Opportunity is updated to Success.">
 
     <munit:behavior>
       <munit-tools:mock-when doc:name="Mock SF Update Sub-flow"
@@ -36,6 +39,8 @@
       <set-variable variableName="opportunityId" value="OPP001" doc:name="Set opportunityId" />
       <set-variable variableName="accountId" value="ACC001" doc:name="Set accountId" />
       <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
+      <!-- All items succeeded -->
       <set-variable variableName="combinedLineItemResults"
         value="#[[{opportunityLineItemId: 'LI001', sppProjectId: 'PROJ001', overallSyncStatus: 'Success', errorReason: ''}]]"
         doc:name="Set combinedLineItemResults" />
@@ -43,7 +48,8 @@
     </munit:execution>
 
     <munit:validation>
-      <munit-tools:verify-call doc:name="Verify SF update was called twice (line items + opportunity)"
+      <!-- update-salesforce-object-subflow called twice: once for line items, once for opportunity -->
+      <munit-tools:verify-call doc:name="Verify SF update was called twice"
                                processor="flow-ref"
                                times="2">
         <munit-tools:with-attributes>
@@ -59,7 +65,7 @@
        ============================================================ -->
   <munit:test name="salesforce-writeback-some-failures-test"
               doc:name="salesforce-writeback - some projects failed"
-              description="When some combinedLineItemResults are Failure, Opportunity is updated to Failed and failedOpportunitiesList is updated.">
+              description="When some combinedLineItemResults are Failure, Opportunity is updated to Failed.">
 
     <munit:behavior>
       <munit-tools:mock-when doc:name="Mock SF Update Sub-flow"
@@ -76,6 +82,8 @@
       <set-variable variableName="opportunityId" value="OPP002" doc:name="Set opportunityId" />
       <set-variable variableName="accountId" value="ACC002" doc:name="Set accountId" />
       <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
+      <!-- Mixed results: one success, one failure -->
       <set-variable variableName="combinedLineItemResults"
         value="#[[{opportunityLineItemId: 'LI001', sppProjectId: 'PROJ001', overallSyncStatus: 'Success', errorReason: ''}, {opportunityLineItemId: 'LI002', sppProjectId: '', overallSyncStatus: 'Failure', errorReason: 'SPP error'}]]"
         doc:name="Set combinedLineItemResults" />
@@ -83,6 +91,7 @@
     </munit:execution>
 
     <munit:validation>
+      <!-- update-salesforce-object-subflow called twice: once for line items, once for opportunity -->
       <munit-tools:verify-call doc:name="Verify SF update was called twice"
                                processor="flow-ref"
                                times="2">
@@ -95,13 +104,15 @@
 
   <!-- ============================================================
        salesforce-writeback
-       Test 3: SF update throws error - error is swallowed, failedOpportunitiesList updated
+       Test 3: SF update throws error - error is swallowed by on-error-continue
+       failedOpportunitiesList is updated with SALESFORCE_WRITE_BACK_ERROR
        ============================================================ -->
   <munit:test name="salesforce-writeback-sf-update-error-test"
               doc:name="salesforce-writeback - SF update throws error"
-              description="When update-salesforce-object-subflow throws an error, it is caught and failedOpportunitiesList is updated.">
+              description="When update-salesforce-object-subflow throws an error, it is caught by on-error-continue and failedOpportunitiesList is updated.">
 
     <munit:behavior>
+      <!-- Mock update-salesforce-object-subflow to throw an error -->
       <munit-tools:mock-when doc:name="Mock SF Update Sub-flow - Error"
                              processor="flow-ref">
         <munit-tools:with-attributes>
@@ -118,6 +129,7 @@
       <set-variable variableName="opportunityId" value="OPP003" doc:name="Set opportunityId" />
       <set-variable variableName="accountId" value="ACC003" doc:name="Set accountId" />
       <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <set-variable variableName="combinedLineItemResults"
         value="#[[{opportunityLineItemId: 'LI001', sppProjectId: 'PROJ001', overallSyncStatus: 'Success', errorReason: ''}]]"
         doc:name="Set combinedLineItemResults" />
@@ -125,13 +137,60 @@
     </munit:execution>
 
     <munit:validation>
-      <!-- Error is swallowed by on-error-continue, failedOpportunitiesList should be updated -->
+      <!-- Error is swallowed by on-error-continue; failedOpportunitiesList should have one entry -->
       <munit-tools:assert-that doc:name="Assert failedOpportunitiesList has one entry"
                                expression="#[sizeOf(vars.failedOpportunitiesList default [])]"
                                is="#[MunitTools::equalTo(1)]" />
       <munit-tools:assert-that doc:name="Assert failure reason is SALESFORCE_WRITE_BACK_ERROR"
                                expression="#[vars.failedOpportunitiesList[0].failureReason]"
                                is="#[MunitTools::equalTo('SALESFORCE_WRITE_BACK_ERROR')]" />
+      <munit-tools:assert-that doc:name="Assert opportunityId is correct"
+                               expression="#[vars.failedOpportunitiesList[0].opportunityId]"
+                               is="#[MunitTools::equalTo('OPP003')]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================================================
+       salesforce-writeback
+       Test 4: No line items with sppProjectId - line item update skipped
+       Only opportunity status update is called
+       ============================================================ -->
+  <munit:test name="salesforce-writeback-no-project-ids-test"
+              doc:name="salesforce-writeback - no sppProjectId in results"
+              description="When combinedLineItemResults have no sppProjectId, the updateSfObject for line items is empty but opportunity update still runs.">
+
+    <munit:behavior>
+      <munit-tools:mock-when doc:name="Mock SF Update Sub-flow"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="update-salesforce-object-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return />
+      </munit-tools:mock-when>
+    </munit:behavior>
+
+    <munit:execution>
+      <set-variable variableName="correlationId" value="test-corr-wb-004" doc:name="Set correlationId" />
+      <set-variable variableName="opportunityId" value="OPP004" doc:name="Set opportunityId" />
+      <set-variable variableName="accountId" value="ACC004" doc:name="Set accountId" />
+      <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
+      <!-- Items with empty sppProjectId -> updateSfOppoLineItemInternalId.dwl filters them out -->
+      <set-variable variableName="combinedLineItemResults"
+        value="#[[{opportunityLineItemId: 'LI001', sppProjectId: '', overallSyncStatus: 'Failure', errorReason: 'SPP error'}]]"
+        doc:name="Set combinedLineItemResults" />
+      <flow-ref name="salesforce-writeback" doc:name="Run salesforce-writeback" />
+    </munit:execution>
+
+    <munit:validation>
+      <!-- update-salesforce-object-subflow still called twice (line items update with empty list + opportunity update) -->
+      <munit-tools:verify-call doc:name="Verify SF update was called twice"
+                               processor="flow-ref"
+                               times="2">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="update-salesforce-object-subflow" />
+        </munit-tools:with-attributes>
+      </munit-tools:verify-call>
     </munit:validation>
   </munit:test>
 

@@ -9,4 +9,4 @@ PositiveRatingCount, NegativeRatingCount, FeaturedContentBoost, FeaturedContentD
 NetworkId, ContentLocation, ExternalDocumentInfo1, ExternalDocumentInfo2, ExternalDataSourceId, 
 Checksum, IsMajorVersion, Field_Image_URL__c, dfsle__GeneratedFileFormat__c, dfsle__GeneratedFileName__c,
  dfsle__GeneratedFileSuffix__c, dfsle__Rule__c 
-FROM ContentVersion WHERE IsLatest = true and ContentDocumentId = '" ++ (vars.currentProject.sfDocumentId default "") ++ "'" 
+FROM ContentVersion WHERE IsLatest = true and ContentDocumentId = '" ++ (vars.bidSheetDocumentId default "") ++ "'" 

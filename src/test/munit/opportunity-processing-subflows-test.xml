@@ -16,6 +16,7 @@
   <!-- ============================================================
        verify-opportunity-exists-and-process-subflow
        Test 1: Empty payload - no opportunities to process
+       soap-consumer-login-subflow must NOT be called
        ============================================================ -->
   <munit:test name="verify-opp-subflow-empty-payload-test"
               doc:name="verify-opportunity-exists-and-process-subflow - empty payload"
@@ -33,8 +34,11 @@
 
     <munit:execution>
       <set-variable variableName="correlationId" value="test-corr-001" doc:name="Set correlationId" />
-      <set-variable variableName="opportunitiesResult" value="#[[]]" doc:name="Set empty opportunitiesResult" />
       <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
+      <!-- opportunitiesResult is empty -> the choice routes to 'when sizeOf == 0' -->
+      <set-variable variableName="opportunitiesResult" value="#[[]]" doc:name="Set empty opportunitiesResult" />
+      <!-- The sub-flow reads payload for the choice condition -->
+      <set-payload value="#[[]]"  doc:name="Set empty payload" />
       <flow-ref name="verify-opportunity-exists-and-process-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
@@ -52,6 +56,7 @@
   <!-- ============================================================
        verify-opportunity-exists-and-process-subflow
        Test 2: Non-empty payload - processes opportunities
+       soap-consumer-login-subflow called once, process-opportunity-subflow called once per opp
        ============================================================ -->
   <munit:test name="verify-opp-subflow-with-opportunities-test"
               doc:name="verify-opportunity-exists-and-process-subflow - with opportunities"
@@ -85,6 +90,8 @@
       <set-variable variableName="opportunitiesResult"
         value="#[[{Id: 'OPP001', AccountId: 'ACC001', Name: 'Test Opp 1'}]]"
         doc:name="Set opportunitiesResult" />
+      <!-- The sub-flow uses payload for the choice condition (sizeOf(payload default []) == 0) -->
+      <set-payload value="#[[{Id: 'OPP001', AccountId: 'ACC001', Name: 'Test Opp 1'}]]"  doc:name="Set payload" />
       <flow-ref name="verify-opportunity-exists-and-process-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
@@ -109,13 +116,14 @@
   <!-- ============================================================
        process-opportunity-subflow
        Test 1: Read customer succeeds, customer exists (existing customer)
+       Flow reuses customer ID and queries line items
        ============================================================ -->
   <munit:test name="process-opp-subflow-existing-customer-test"
               doc:name="process-opportunity-subflow - existing customer found"
               description="When SPP read customer returns an existing customer, the flow reuses the customer ID and queries line items.">
 
     <munit:behavior>
-      <!-- Mock soap-service-common-subflow for read customer -->
+      <!-- Mock soap-service-common-subflow for read customer - returns existing customer -->
       <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Read Customer"
                              processor="flow-ref">
         <munit-tools:with-attributes>
@@ -123,7 +131,7 @@
         </munit-tools:with-attributes>
         <munit-tools:then-return>
           <munit-tools:payload
-            value="#[{body: {readResponse: {readReturn: {objects: {oaCustomer: {id: 'CUST001', name: 'Test Customer'}}}}}}]"
+            value="#[{body: {readResponse: {readReturn: {ReadResult: {objects: {oaCustomer: {id: 'CUST001', name: 'Test Customer'}}}}}}}]"
             mediaType="application/java" />
           <munit-tools:variables>
             <munit-tools:variable key="wscError" value="#[null]" />
@@ -132,8 +140,8 @@
         </munit-tools:then-return>
       </munit-tools:mock-when>
 
-      <!-- Mock common-salesforce-query-sub-flow for line items -->
-      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow - Line Items"
+      <!-- Mock common-salesforce-query-sub-flow for line items - returns empty -->
+      <munit-tools:mock-when doc:name="Mock SF Query Sub-flow - Line Items Empty"
                              processor="flow-ref">
         <munit-tools:with-attributes>
           <munit-tools:with-attribute attributeName="name" whereValue="common-salesforce-query-sub-flow" />
@@ -154,6 +162,15 @@
         </munit-tools:with-attributes>
         <munit-tools:then-return />
       </munit-tools:mock-when>
+
+      <!-- Mock update-salesforce-object-subflow (called when no line items) -->
+      <munit-tools:mock-when doc:name="Mock SF Update Sub-flow"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="update-salesforce-object-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return />
+      </munit-tools:mock-when>
     </munit:behavior>
 
     <munit:execution>
@@ -161,26 +178,30 @@
       <set-variable variableName="opportunityId" value="OPP001" doc:name="Set opportunityId" />
       <set-variable variableName="accountId" value="ACC001" doc:name="Set accountId" />
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <set-variable variableName="currentOpportunity"
-        value="#[{Id: 'OPP001', AccountId: 'ACC001', Account: {Name: 'Test Account', Long_Account_ID__c: 'ACC001'}}]"
+        value="#[{Id: 'OPP001', AccountId: 'ACC001', Account: {Name: 'Test Account', Long_Account_ID__c: 'ACC001', BillingStreet: '123 Main St', BillingCity: 'Denver', BillingStateCode: 'CO', BillingPostalCode: '80202', BillingCountry: 'US', Phone: '555-1234', Fax: null}}]"
         doc:name="Set currentOpportunity" />
       <flow-ref name="process-opportunity-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
-      <munit-tools:assert-that doc:name="Assert sppCustomer oaCustomerId is set"
-                               expression="#[vars.sppCustomer.oaCustomerId]"
-                               is="#[MunitTools::equalTo('CUST001')]" />
+      <munit-tools:assert-that doc:name="Assert sppCustomer customerStatus is Existing"
+                               expression="#[vars.sppCustomer.customerStatus]"
+                               is="#[MunitTools::equalTo('Existing')]" />
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        process-opportunity-subflow
        Test 2: Read customer fails (wscError set)
+       Flow raises APP:OPP_PROCESS_ERROR, error handler marks opp as Failed in SF
        ============================================================ -->
   <munit:test name="process-opp-subflow-read-customer-fails-test"
               doc:name="process-opportunity-subflow - read customer fails"
-              description="When SPP read customer returns a wscError, the flow raises APP:OPP_PROCESS_ERROR."
+              description="When SPP read customer returns a wscError, the flow raises APP:OPP_PROCESS_ERROR and marks opportunity as Failed."
               expectedErrorType="APP:OPP_PROCESS_ERROR">
 
     <munit:behavior>
@@ -198,7 +219,7 @@
         </munit-tools:then-return>
       </munit-tools:mock-when>
 
-      <!-- Mock update-salesforce-object-subflow (called in error handler) -->
+      <!-- Mock update-salesforce-object-subflow (called in error handler to mark opp as Failed) -->
       <munit-tools:mock-when doc:name="Mock SF Update Sub-flow"
                              processor="flow-ref">
         <munit-tools:with-attributes>
@@ -213,14 +234,17 @@
       <set-variable variableName="opportunityId" value="OPP001" doc:name="Set opportunityId" />
       <set-variable variableName="accountId" value="ACC001" doc:name="Set accountId" />
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <set-variable variableName="currentOpportunity"
-        value="#[{Id: 'OPP001', AccountId: 'ACC001', Account: {Name: 'Test Account'}}]"
+        value="#[{Id: 'OPP001', AccountId: 'ACC001', Account: {Name: 'Test Account', Long_Account_ID__c: 'ACC001'}}]"
         doc:name="Set currentOpportunity" />
       <flow-ref name="process-opportunity-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
-      <munit-tools:assert-that doc:name="Assert error identifier"
+      <munit-tools:assert-that doc:name="Assert error identifier is OPP_PROCESS_ERROR"
                                expression="#[error.errorType.identifier]"
                                is="#[MunitTools::equalTo('OPP_PROCESS_ERROR')]" />
     </munit:validation>
@@ -235,10 +259,11 @@
               description="When SPP read customer returns null oaCustomerId, the flow creates a new customer and continues.">
 
     <munit:behavior>
-      <!-- First call: read customer returns null id -->
-      <!-- Second call: add customer returns new id -->
-      <!-- We use a counter approach via spy or sequential mocks -->
-      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Read then Add Customer"
+      <!-- First call to soap-service-common-subflow: read customer returns null id
+           Second call: add customer returns new id
+           MUnit mock-when matches ALL calls to this sub-flow with the same mock.
+           We use a single mock that returns the add response (simulating the create path). -->
+      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Returns null customer then new customer"
                              processor="flow-ref">
         <munit-tools:with-attributes>
           <munit-tools:with-attribute attributeName="name" whereValue="soap-service-common-subflow" />
@@ -276,6 +301,15 @@
         </munit-tools:with-attributes>
         <munit-tools:then-return />
       </munit-tools:mock-when>
+
+      <!-- Mock update-salesforce-object-subflow -->
+      <munit-tools:mock-when doc:name="Mock SF Update Sub-flow"
+                             processor="flow-ref">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="update-salesforce-object-subflow" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-return />
+      </munit-tools:mock-when>
     </munit:behavior>
 
     <munit:execution>
@@ -283,18 +317,21 @@
       <set-variable variableName="opportunityId" value="OPP002" doc:name="Set opportunityId" />
       <set-variable variableName="accountId" value="ACC002" doc:name="Set accountId" />
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
+      <set-variable variableName="sfError" value="#[null]" doc:name="Clear sfError" />
       <!-- Pre-set sppCustomer with null oaCustomerId to simulate read returning no customer -->
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: null, oaCustomerName: null, opportunityId: 'OPP002', customerStatus: 'New'}]"
         doc:name="Set sppCustomer with null id" />
       <set-variable variableName="currentOpportunity"
-        value="#[{Id: 'OPP002', AccountId: 'ACC002', Account: {Name: 'New Account', Long_Account_ID__c: 'ACC002'}}]"
+        value="#[{Id: 'OPP002', AccountId: 'ACC002', Account: {Name: 'New Account', Long_Account_ID__c: 'ACC002', BillingStreet: '456 Oak Ave', BillingCity: 'Austin', BillingStateCode: 'TX', BillingPostalCode: '78701', BillingCountry: 'US', Phone: '555-5678', Fax: null}}]"
         doc:name="Set currentOpportunity" />
       <flow-ref name="process-opportunity-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
-      <munit-tools:assert-that doc:name="Assert no error"
+      <munit-tools:assert-that doc:name="Assert no wscError"
                                expression="#[vars.wscError]"
                                is="#[MunitTools::nullValue()]" />
     </munit:validation>
@@ -302,11 +339,11 @@
 
   <!-- ============================================================
        process-opportunity-line-items
-       Test 1: No line items - opportunity marked Processed
+       Test 1: No line items - opportunity marked Success in Salesforce
        ============================================================ -->
   <munit:test name="process-line-items-empty-test"
               doc:name="process-opportunity-line-items - no line items"
-              description="When payload is empty, the opportunity is marked Processed in Salesforce.">
+              description="When payload is empty, the opportunity is marked Success in Salesforce.">
 
     <munit:behavior>
       <munit-tools:mock-when doc:name="Mock SF Update Sub-flow"
@@ -326,12 +363,14 @@
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <set-payload value="#[[]]" doc:name="Set empty line item payload" mediaType="application/java" />
+      <!-- Empty payload -> the choice routes to 'otherwise' (no line items) -->
+      <set-payload value="#[[]]" doc:name="Set empty line item payload"  />
       <flow-ref name="process-opportunity-line-items" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
-      <munit-tools:verify-call doc:name="Verify SF update was called"
+      <!-- When no line items, update-salesforce-object-subflow is called to mark opp as Success -->
+      <munit-tools:verify-call doc:name="Verify SF update was called once"
                                processor="flow-ref"
                                times="1">
         <munit-tools:with-attributes>
@@ -344,12 +383,14 @@
   <!-- ============================================================
        process-opportunity-line-items
        Test 2: Line items present, projects to create
+       verify-project-exists-in-spp-subflow called per item, batch creation triggered
        ============================================================ -->
   <munit:test name="process-line-items-with-items-test"
               doc:name="process-opportunity-line-items - with line items"
               description="When payload has line items, verify-project-exists-in-spp-subflow is called for each and batch creation is triggered.">
 
     <munit:behavior>
+      <!-- Mock verify-project-exists-in-spp-subflow to add item to projectsToCreate -->
       <munit-tools:mock-when doc:name="Mock Verify Project Sub-flow"
                              processor="flow-ref">
         <munit-tools:with-attributes>
@@ -358,12 +399,12 @@
         <munit-tools:then-return>
           <munit-tools:variables>
             <munit-tools:variable key="projectsToCreate"
-              value="#[[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]]"
-              doc:name="Set projectsToCreate" />
+              value="#[[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]]" />
           </munit-tools:variables>
         </munit-tools:then-return>
       </munit-tools:mock-when>
 
+      <!-- Mock batch-create-spp-projects-subflow -->
       <munit-tools:mock-when doc:name="Mock Batch Create Projects Sub-flow"
                              processor="flow-ref">
         <munit-tools:with-attributes>
@@ -372,12 +413,12 @@
         <munit-tools:then-return>
           <munit-tools:variables>
             <munit-tools:variable key="newProjectCreationResults"
-              value="#[[{opportunityId: 'OPP001', opportunityLineItemId: 'LI001', sppProjectId: 'PROJ001', overallSyncStatus: 'Success', errorReason: ''}]]"
-              doc:name="Set newProjectCreationResults" />
+              value="#[[{opportunityId: 'OPP001', opportunityLineItemId: 'LI001', sppProjectId: 'PROJ001', overallSyncStatus: 'Success', errorReason: '', sppAttachmentStatus: '', sppAttachmentId: ''}]]" />
           </munit-tools:variables>
         </munit-tools:then-return>
       </munit-tools:mock-when>
 
+      <!-- Mock salesforce-writeback -->
       <munit-tools:mock-when doc:name="Mock Salesforce Writeback Sub-flow"
                              processor="flow-ref">
         <munit-tools:with-attributes>
@@ -393,14 +434,23 @@
       <set-variable variableName="accountId" value="ACC001" doc:name="Set accountId" />
       <set-variable variableName="failedOpportunitiesList" value="#[[]]" doc:name="Set failedOpportunitiesList" />
       <set-variable variableName="existingProjectCreationResults" value="#[[]]" doc:name="Set existingProjectCreationResults" />
+      <set-variable variableName="projectsToCreate" value="#[[]]" doc:name="Set projectsToCreate" />
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <set-payload value="#[[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null, Product2: {Name: 'Test Product'}}]]" doc:name="Set line item payload" mediaType="application/java" />
+      <!-- Non-empty payload -> the choice routes to 'when !isEmpty(payload)' -->
+      <set-payload value="#[[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null, Product2: {Name: 'Test Product'}}]]" doc:name="Set line item payload"  />
       <flow-ref name="process-opportunity-line-items" doc:name="Run Sub-flow" />
     </munit:execution>
 
     <munit:validation>
+      <munit-tools:verify-call doc:name="Verify verify-project-exists-in-spp-subflow was called once"
+                               processor="flow-ref"
+                               times="1">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="verify-project-exists-in-spp-subflow" />
+        </munit-tools:with-attributes>
+      </munit-tools:verify-call>
       <munit-tools:verify-call doc:name="Verify batch-create-spp-projects-subflow was called"
                                processor="flow-ref"
                                times="1">
@@ -408,19 +458,26 @@
           <munit-tools:with-attribute attributeName="name" whereValue="batch-create-spp-projects-subflow" />
         </munit-tools:with-attributes>
       </munit-tools:verify-call>
+      <munit-tools:verify-call doc:name="Verify salesforce-writeback was called"
+                               processor="flow-ref"
+                               times="1">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute attributeName="name" whereValue="salesforce-writeback" />
+        </munit-tools:with-attributes>
+      </munit-tools:verify-call>
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        verify-project-exists-in-spp-subflow
-       Test 1: Project exists in SPP, no document
+       Test 1: Project exists in SPP, no document -> existingProjectCreationResults Success
        ============================================================ -->
   <munit:test name="verify-project-exists-subflow-project-found-no-doc-test"
               doc:name="verify-project-exists-in-spp-subflow - project exists, no document"
               description="When SPP read project returns an existing project and line item has no document, result is added to existingProjectCreationResults as Success.">
 
     <munit:behavior>
-      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Read Project"
+      <munit-tools:mock-when doc:name="Mock SOAP Common Sub-flow - Read Project Found"
                              processor="flow-ref">
         <munit-tools:with-attributes>
           <munit-tools:with-attribute attributeName="name" whereValue="soap-service-common-subflow" />
@@ -443,10 +500,13 @@
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
       <set-variable variableName="existingProjectCreationResults" value="#[[]]" doc:name="Set existingProjectCreationResults" />
       <set-variable variableName="projectsToCreate" value="#[[]]" doc:name="Set projectsToCreate" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <set-payload value="#[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]" doc:name="Set project line item payload" mediaType="application/java" />
+      <!-- Line item WITHOUT a document -->
+      <set-payload value="#[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]" doc:name="Set line item payload"  />
       <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
@@ -454,9 +514,16 @@
       <munit-tools:assert-that doc:name="Assert existingProjectCreationResults has one entry"
                                expression="#[sizeOf(vars.existingProjectCreationResults default [])]"
                                is="#[MunitTools::equalTo(1)]" />
-      <munit-tools:assert-that doc:name="Assert result is Success"
+      <munit-tools:assert-that doc:name="Assert result overallSyncStatus is Success"
                                expression="#[vars.existingProjectCreationResults[0].overallSyncStatus]"
                                is="#[MunitTools::equalTo('Success')]" />
+      <munit-tools:assert-that doc:name="Assert sppProjectStatus is Existing"
+                               expression="#[vars.existingProjectCreationResults[0].sppProjectStatus]"
+                               is="#[MunitTools::equalTo('Existing')]" />
+      <!-- projectsToCreate should remain empty -->
+      <munit-tools:assert-that doc:name="Assert projectsToCreate is still empty"
+                               expression="#[sizeOf(vars.projectsToCreate default [])]"
+                               is="#[MunitTools::equalTo(0)]" />
     </munit:validation>
   </munit:test>
 
@@ -475,6 +542,7 @@
           <munit-tools:with-attribute attributeName="name" whereValue="soap-service-common-subflow" />
         </munit-tools:with-attributes>
         <munit-tools:then-return>
+          <!-- Empty objects -> oaProject[0].id will be null -> oaProjectId = "" -> isEmpty -> goes to otherwise -->
           <munit-tools:payload
             value="#[{body: {readResponse: {ReadResult: {objects: {}}}}}]"
             mediaType="application/java" />
@@ -492,10 +560,12 @@
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
       <set-variable variableName="existingProjectCreationResults" value="#[[]]" doc:name="Set existingProjectCreationResults" />
       <set-variable variableName="projectsToCreate" value="#[[]]" doc:name="Set projectsToCreate" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <set-payload value="#[{Id: 'LI002', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]" doc:name="Set project line item payload" mediaType="application/java" />
+      <set-payload value="#[{Id: 'LI002', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]" doc:name="Set line item payload" />
       <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
@@ -503,12 +573,16 @@
       <munit-tools:assert-that doc:name="Assert projectsToCreate has one entry"
                                expression="#[sizeOf(vars.projectsToCreate default [])]"
                                is="#[MunitTools::equalTo(1)]" />
+      <!-- existingProjectCreationResults should remain empty -->
+      <munit-tools:assert-that doc:name="Assert existingProjectCreationResults is still empty"
+                               expression="#[sizeOf(vars.existingProjectCreationResults default [])]"
+                               is="#[MunitTools::equalTo(0)]" />
     </munit:validation>
   </munit:test>
 
   <!-- ============================================================
        verify-project-exists-in-spp-subflow
-       Test 3: SOAP call fails (wscError set)
+       Test 3: SOAP call fails (wscError set) -> Failure in existingProjectCreationResults
        ============================================================ -->
   <munit:test name="verify-project-exists-subflow-soap-error-test"
               doc:name="verify-project-exists-in-spp-subflow - SOAP error"
@@ -536,10 +610,12 @@
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
       <set-variable variableName="existingProjectCreationResults" value="#[[]]" doc:name="Set existingProjectCreationResults" />
       <set-variable variableName="projectsToCreate" value="#[[]]" doc:name="Set projectsToCreate" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <set-payload value="#[{Id: 'LI003', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]" doc:name="Set project line item payload" mediaType="application/java" />
+      <set-payload value="#[{Id: 'LI003', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: null}]" doc:name="Set line item payload"  />
       <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
@@ -547,7 +623,7 @@
       <munit-tools:assert-that doc:name="Assert existingProjectCreationResults has one failure entry"
                                expression="#[sizeOf(vars.existingProjectCreationResults default [])]"
                                is="#[MunitTools::equalTo(1)]" />
-      <munit-tools:assert-that doc:name="Assert result is Failure"
+      <munit-tools:assert-that doc:name="Assert result overallSyncStatus is Failure"
                                expression="#[vars.existingProjectCreationResults[0].overallSyncStatus]"
                                is="#[MunitTools::equalTo('Failure')]" />
     </munit:validation>
@@ -555,7 +631,7 @@
 
   <!-- ============================================================
        verify-project-exists-in-spp-subflow
-       Test 4: Project exists, has document - handle-document-for-existing-project-subflow called
+       Test 4: Project exists, has document -> handle-document-for-existing-project-subflow called
        ============================================================ -->
   <munit:test name="verify-project-exists-subflow-project-found-with-doc-test"
               doc:name="verify-project-exists-in-spp-subflow - project exists with document"
@@ -586,8 +662,7 @@
         <munit-tools:then-return>
           <munit-tools:variables>
             <munit-tools:variable key="existingProjectCreationResults"
-              value="#[[{opportunityId: 'OPP001', overallSyncStatus: 'Success'}]]"
-              doc:name="Set existingProjectCreationResults" />
+              value="#[[{opportunityId: 'OPP001', overallSyncStatus: 'Success', sppAttachmentStatus: 'Existing'}]]" />
           </munit-tools:variables>
         </munit-tools:then-return>
       </munit-tools:mock-when>
@@ -599,10 +674,13 @@
       <set-variable variableName="soapHeader" value="#[{sessionId: 'test-session'}]" doc:name="Set soapHeader" />
       <set-variable variableName="existingProjectCreationResults" value="#[[]]" doc:name="Set existingProjectCreationResults" />
       <set-variable variableName="projectsToCreate" value="#[[]]" doc:name="Set projectsToCreate" />
+      <set-variable variableName="wscError" value="#[null]" doc:name="Clear wscError" />
+      <set-variable variableName="oaErrorCode" value="#[null]" doc:name="Clear oaErrorCode" />
       <set-variable variableName="sppCustomer"
         value="#[{oaCustomerId: 'CUST001', customerStatus: 'Existing'}]"
         doc:name="Set sppCustomer" />
-      <set-payload value="#[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: 'DOC001'}]" doc:name="Set project line item payload" mediaType="application/java" />
+      <!-- Line item WITH a document -->
+      <set-payload value="#[{Id: 'LI001', OpportunityId: 'OPP001', Bid_Sheet_ContentDocumentId__c: 'DOC001'}]" doc:name="Set line item payload"  />
       <flow-ref name="verify-project-exists-in-spp-subflow" doc:name="Run Sub-flow" />
     </munit:execution>
 
@@ -614,6 +692,9 @@
           <munit-tools:with-attribute attributeName="name" whereValue="handle-document-for-existing-project-subflow" />
         </munit-tools:with-attributes>
       </munit-tools:verify-call>
+      <munit-tools:assert-that doc:name="Assert existingProjectCreationResults has one entry"
+                               expression="#[sizeOf(vars.existingProjectCreationResults default [])]"
+                               is="#[MunitTools::equalTo(1)]" />
     </munit:validation>
   </munit:test>
 

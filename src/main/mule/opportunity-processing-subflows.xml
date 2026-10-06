@@ -100,7 +100,7 @@ payload.AccountId default "" //Account Id of current executing opportunity]]></e
 							</choice>
 				</when>
 				<otherwise>
-					<logger level="INFO" doc:name="Customer Already exists" doc:id="af1cca24-e64c-43bc-aca1-634c58ad32e9" category="com.mycompany.sfspp.process-opportunity-subflow" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'skipping new Customer creation in SPP customer already exists'&#10;}]"/>
+					<logger level="INFO" doc:name="Customer Already exists" doc:id="af1cca24-e64c-43bc-aca1-634c58ad32e9" category="com.mycompany.sfspp.process-opportunity-subflow" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'skipping new Customer creation in SPP customer already exists: ',&#10;&quot;Customer&quot;: vars.sppCustomer&#10;}]"/>
 				</otherwise>
 			</choice>
 			<logger level="INFO" doc:name="Logger" doc:id="5e629019-2659-42c7-86b1-efbd4a0985ca" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Initiated salesforce opportunity line item query call'&#10;}]"/>
@@ -119,7 +119,7 @@ payload.AccountId default "" //Account Id of current executing opportunity]]></e
 										
 </when>
 										<otherwise >
-											<logger level="ERROR" doc:name="Logger" doc:id="5c3f68a8-eb9c-4131-b292-7cb1ca4f2a53" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Response received from Salesforce oppt Line item call',&#10;&quot;opportunityId&quot; :vars.opportunityId default &quot;&quot;,&#10;&quot;NoOfOpptlineitems&quot;:sizeOf(payload default[])&#10;&#10;}]"/>
+											<logger level="INFO" doc:name="Logger" doc:id="5c3f68a8-eb9c-4131-b292-7cb1ca4f2a53" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Response received from Salesforce oppt Line item call',&#10;&quot;opportunityId&quot; :vars.opportunityId default &quot;&quot;,&#10;&quot;NoOfOpptlineitems&quot;:sizeOf(payload default[])&#10;&#10;}]"/>
 							<flow-ref doc:name="process-opportunity-line-items" doc:id="fe20fc76-8a83-41ec-afa6-7158ebe1b35d" name="process-opportunity-line-items" />
 										
 </otherwise>
@@ -197,7 +197,7 @@ output application/json
 					</otherwise>
 				</choice>
 				<set-variable value="#[%dw 2.0&#10;output application/json&#10;var allProjectResults =(vars.existingProjectCreationResults default []) ++ (vars.newProjectCreationResults default [])&#10;---&#10;allProjectResults]" doc:name="Set Combined New and Existing Project Results" doc:id="c27ee297-a2d3-40ea-bf33-531f30b8ad38" variableName="combinedLineItemResults"/>
-				<logger level="INFO" doc:name="Logger" doc:id="f1dee910-396f-4441-9c1b-2427ba2e6adb" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'completed line item processing for this opportunity ',&#10;&quot;opportunityId&quot;:vars.opportunityId,&#10;&quot;combinedLineItemResults&quot; :write(vars.combinedLineItemResults, &quot;application/json&quot;)&#10;}]"/>
+				<logger level="INFO" doc:name="Logger" doc:id="f1dee910-396f-4441-9c1b-2427ba2e6adb" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'completed line item processing for this opportunity ',&#10;&quot;opportunityId&quot;:vars.opportunityId,&#10;&quot;combinedLineItemResults&quot; :vars.combinedLineItemResults default []&#10;}]"/>
 				<ee:transform doc:name="Success and Failed results" doc:id="0ce8a426-bb24-4a56-8260-21ed1925c6af">
 			<ee:message>
 			</ee:message>
@@ -225,7 +225,7 @@ var failedProjectResults = (vars.combinedLineItemResults default []) filter ((it
 )]]></ee:set-variable>
 			</ee:variables>
 		</ee:transform>
-				<logger level="INFO" doc:name="Logger" doc:id="9b9ce0bc-7904-4fe3-b878-84fb4f65f03d" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Initiated writeback for all projects'&#10;}]"/>
+				<logger level="INFO" doc:name="Logger" doc:id="9b9ce0bc-7904-4fe3-b878-84fb4f65f03d" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Initiated writeback for all projects',&#10;&quot;failedOpportunitiesList&quot;: vars.failedOpportunitiesList default [],&#10;&quot;successProjects&quot; : vars.successProjects default []&#10;&#10;}]"/>
 				<flow-ref doc:name="salesforce-writeback" doc:id="c5e6ea97-a545-4938-8e3c-880fe3bf5849" name="salesforce-writeback" />
 				<logger level="INFO" doc:name="Logger" doc:id="07b72665-d0c2-4257-ac24-9f432d891b81" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'completed writeback for all projects'&#10;}]"/>
 			</when>
@@ -309,7 +309,7 @@ vars.existingProjectCreationResults default[] ++ [{
 				</ee:transform>
 			</when>
 			<otherwise >
-				<set-variable value='#[%dw 2.0&#10;output application/json&#10;var projectdata = payload.body.readResponse..ReadResult.objects&#10;---&#10;{&#10;	oaProjectId: projectdata.oaProject[0].id default "",&#10;	oaProject_sf_id__c: projectdata.oaProject[0].project_sf_id__c default "",&#10;	oaProjectName: projectdata.oaProject[0].name default "",&#10;	oaProjectStatus: if(projectdata.oaProject[0].id != null) "Existing" else null&#10;}]' doc:name="Soap Service response Payload - Extract line items" doc:id="81f54bcd-aeab-41b6-8b41-5060b6333ec0" variableName="sppProject" />
+				<set-variable value='#[%dw 2.0&#10;output application/json&#10;var projectdata = payload.body.readResponse..ReadResult.objects&#10;---&#10;{&#10;	oaProjectId: projectdata.oaProject[0].id default "",&#10;	oaProject_sf_id__c: projectdata.oaProject[0].project_sf_id__c default "",&#10;	oaProjectName: projectdata.oaProject[0].name default "",&#10;	oaProjectStatus: if(projectdata.oaProject[0].id != null) "Existing" else ""&#10;}]' doc:name="Soap Service response Payload - Extract line items" doc:id="81f54bcd-aeab-41b6-8b41-5060b6333ec0" variableName="sppProject" />
 				<logger level="INFO" doc:name="Logger" doc:id="9ba161d8-7712-49fe-9a82-46587cd742c8" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'completed Read project result',&#10;&quot;sppProject&quot;:vars.sppProject&#10;}]"/>
 				<choice doc:name="Project Exists?" doc:id="4743fa7a-c846-4047-a568-c38a4d860db7">
 			<when expression="#[!isEmpty(vars.sppProject.oaProjectId)]" doc:id="50d48e27-9b0c-49cd-8d8c-9dfdd0ba0e26">

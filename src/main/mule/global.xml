@@ -41,17 +41,6 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd">
 	<configuration
 		defaultErrorHandler-ref="globalErrorHandler" />
-	<!-- <configuration-properties doc:name="Configuration properties" file="properties/common-properties.yaml" 
-		/> --><!-- <secure-properties:config name="Secure_Properties_Config" file="properties/secure-${mule.env}.yaml" 
-		key="${secure.key}" doc:name="Secure Properties Config" doc:id="doc-e25305c3" 
-		/> --><!-- <http:request-config name="Openair_soapConfig" doc:name="openair-soap 
-		placeholder config (review host before deploy)"> <http:request-connection 
-		protocol="HTTPS" host="${openair-soap.host}" port="${openair-soap.port}" 
-		/> </http:request-config> -->
-	<!-- <http:request-config name="Mule_secure_propertiesConfig" doc:name="mule-secure-properties 
-		placeholder config (review host before deploy)"> <http:request-connection 
-		protocol="HTTPS" host="${mule-secure-properties.host}" port="${mule-secure-properties.port}" 
-		/> </http:request-config> -->
 	<salesforce:sfdc-config name="salesforceConfig"
 		doc:name="Salesforce Config"
 		doc:id="c0577305-4c6f-44e8-984f-6d7acada01c3">
@@ -110,72 +99,50 @@ http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/em
 		value="mule" />
 	<!-- <email:smtp-config name="emailSMTP" doc:name="Email SMTP" doc:id="efa670fa-9dac-4773-a2b9-61c3eafa0e66" 
 		> </email:smtp-config> -->
-	<configuration-properties doc:name="Configuration properties" doc:id="d4fd0f61-3e45-4919-8814-3c652faa2a04" file="properties\common-properties.yaml" />
-	<configuration-properties doc:name="Configuration properties" doc:id="0ce10505-7069-4492-aee0-44c6037f9b73" file="properties\secure-${mule.env}.yaml" />
+	<configuration-properties
+		doc:name="Configuration properties"
+		doc:id="d4fd0f61-3e45-4919-8814-3c652faa2a04"
+		file="properties\common-properties.yaml" />
+	<configuration-properties
+		doc:name="Configuration properties"
+		doc:id="0ce10505-7069-4492-aee0-44c6037f9b73"
+		file="properties\secure-${mule.env}.yaml" />
 	<error-handler name="globalErrorHandler"
 		doc:id="8a0bf480-74bf-413d-a114-3d59f0c75347">
-		<on-error-propagate enableNotifications="true"
+		<on-error-continue enableNotifications="true"
 			logException="true" doc:name="On Error Propagate"
 			doc:id="d5e09ac6-adcd-4b7d-895c-bc927606023f"
 			type="APP:PROCESS_ERROR">
 			<logger level="INFO" doc:name="Logger"
 				doc:id="8fd85536-e18b-43ed-849b-5407f75e4f36"
 				message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Failure at Initial phase. Going to Send Mail Notification'&#10;}]" />
-			<ee:transform doc:name="Transform Message" doc:id="137442be-9054-47c7-8fc3-f8440278936c" >
-				<ee:message >
-					<ee:set-payload ><![CDATA[%dw 2.0
-output text/plain
----
-"<html>
-<body>
-<p>Hi Team,</p>
-
-<p>
-The Opportunity Project Sync process has completed.
-Opportunity is failed during intial data retrieval phase so no Lineitmes are processed 
-</p>
-
-
-<p>Please review the above Opportunities and take the necessary action.</p>
-
-<p>Thanks,<br/>
-Integration Team</p>
-
-</body>
-</html>"]]></ee:set-payload>
-				</ee:message>
-			</ee:transform>
+			<set-variable
+				value='#[%dw 2.0&#10;output text/plain&#10;---&#10;"&lt;html&gt;&#10;&lt;body&gt;&#10;&lt;p&gt;Hi Team,&lt;/p&gt;&#10;&#10;&lt;p&gt;&#10;The Opportunity Project Sync process has completed. &#10;Opportunity is failed during intial data retrieval phase so no Line items are processed.&#10;Reason for failure is:  &#10;&lt;/p&gt;" ++ (vars.failureReason default "") ++&#10;&#10;"&lt;p&gt;Thanks,&lt;br/&gt;&#10;Integration Team&lt;/p&gt;&#10;&#10;&lt;/body&gt;&#10;&lt;/html&gt;"]'
+				doc:name="Set mail Failure Reason"
+				doc:id="4e17423b-a9a9-4422-8125-ad8acd4dac88"
+				variableName="emailBody" />
 			<flow-ref doc:name="sent-mail-notification-subflow" doc:id="05074457-1457-4f51-8cf6-1d53f5914fd2" 
 				name="sent-mail-notification-subflow"/>
-		</on-error-propagate>
-		<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="1b9249fb-6643-406e-b09a-a7f4649cbf73" type="ANY" >
-			<logger level="INFO" doc:name="Logger" doc:id="399a50a4-975f-4023-b702-c2c7882798e3" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Failure at Initial phase. Going to Send Mail Notification'&#10;}]" />
-			<ee:transform doc:name="Transform Message" doc:id="23a49bdb-c5a8-4ba3-bc8b-ce855bc53a56" >
-				<ee:message >
-					<ee:set-payload ><![CDATA[%dw 2.0
-output text/plain
----
-"<html>
-<body>
-<p>Hi Team,</p>
-
-<p>
-The Opportunity Project Sync process has completed.
-Opportunity is failed during intial data retrieval phase so no Lineitmes are processed 
-</p>
-
-
-<p>Please review the above Opportunities and take the necessary action.</p>
-
-<p>Thanks,<br/>
-Integration Team</p>
-
-</body>
-</html>"]]></ee:set-payload>
-				</ee:message>
-			</ee:transform>
+			<logger level="INFO" doc:name="Logger" doc:id="6cb646dc-03c5-4075-9536-5c05b1c1a146" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Stopping transaction due to process error'&#10;}]" />
+		</on-error-continue>
+		<on-error-continue enableNotifications="true"
+			logException="true" doc:name="On Error Continue"
+			doc:id="2e2009af-5481-45c0-9f3e-edb07dc723cf" type="APP:MAIL_ERROR">
+			<logger level="INFO" doc:name="Logger"
+				doc:id="9ae43a43-4141-4037-bf63-7322e76ec908"
+				message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Failed to sent email. Stopping the transaction.'&#10;}]" />
+		</on-error-continue>
+		<on-error-continue enableNotifications="true"
+			logException="true" doc:name="On Error Propagate"
+			doc:id="1b9249fb-6643-406e-b09a-a7f4649cbf73" type="ANY">
+			<logger level="INFO" doc:name="Logger"
+				doc:id="399a50a4-975f-4023-b702-c2c7882798e3"
+				message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Failure at Initial phase. Going to Send Mail Notification'&#10;}]" />
+			<set-variable value='#[%dw 2.0&#10;output text/plain&#10;---&#10;"&lt;html&gt;&#10;&lt;body&gt;&#10;&lt;p&gt;Hi Team,&lt;/p&gt;&#10;&#10;&lt;p&gt;&#10;The Opportunity Project Sync process has completed.&#10;Opportunity is failed during intial data retrieval phase so no Lineitmes are processed &#10;&lt;/p&gt;&#10;&#10;&#10;&lt;p&gt;Please review the above Opportunities and take the necessary action.&lt;/p&gt;&#10;&#10;&lt;p&gt;Thanks,&lt;br/&gt;&#10;Integration Team&lt;/p&gt;&#10;&#10;&lt;/body&gt;&#10;&lt;/html&gt;"]' doc:name="Set mail Failure Reason" doc:id="8db13c1f-a467-408a-ae19-30c57253efea" variableName="emailBody" />
 			<flow-ref doc:name="sent-mail-notification-subflow" doc:id="058f3895-1a8f-4cbf-a465-ebf519df0496" name="sent-mail-notification-subflow" />
-		</on-error-propagate>
+			<logger level="INFO" doc:name="Logger" doc:id="aa2e5074-49f9-4aff-8744-62933f7677d8" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Stopping transaction due to process error'&#10;}]" />
+		</on-error-continue>
+
 	
 </error-handler>
 	<http:request-config
