@@ -59,7 +59,20 @@ vars.projectCreationResults filter ((item) -> item.overallSyncStatus == "Success
 					<choice doc:name="Project Creation Succeeded?" doc:id="878040dc-8935-4d52-a19b-7585c30fc0fc">
             <when expression='#[vars.currentProject.hasRelatedDocument]' doc:id="bc19aa69-0117-48b7-8a2c-054e574ca61f">
 							<logger level="INFO" doc:name="Logger" doc:id="4ac1d9cc-2ab3-40a4-ad32-f087ea0395d2" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'started document creation for project',&#10;&quot;sppProjectId&quot; : vars.currentProject.sppProjectId&#10;}]"/>
-							<set-variable value="#[vars.currentProject.sfDocumentId]" doc:name="Set SF Document ID" doc:id="31bf1af1-f052-49e3-af05-e7d45af74f1f" variableName="bidSheetDocumentId"/>
+							
+							<ee:transform doc:name="Transform Message" doc:id="8539942d-55dd-4111-8106-0378487a6f6b">
+							
+							<ee:variables >
+								<ee:set-variable variableName="createDocOwnerId" ><![CDATA[%dw 2.0
+output application/java
+---
+vars.sppProject.oaProjectId default ""]]></ee:set-variable>
+<ee:set-variable variableName="bidSheetDocumentId" ><![CDATA[%dw 2.0
+output application/java
+---
+vars.currentProject.sfDocumentId default ""]]></ee:set-variable>
+							</ee:variables>
+						</ee:transform>
 							<flow-ref name="create-openair-document-subflow-wsc" doc:name="Create document for New Project" doc:id="c4258bdc-c9d9-4bec-a030-6363a7d6c9aa" />
 							<ee:transform doc:name="Aggregate success results" doc:id="7cf44840-fad4-4826-bab9-0e71dda16d28">
 						<ee:variables>

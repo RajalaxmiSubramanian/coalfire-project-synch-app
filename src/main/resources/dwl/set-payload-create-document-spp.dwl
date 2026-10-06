@@ -7,7 +7,7 @@ oair#add: {
     objects: {
         oaAttachment: {
             file_name: payload.Title default "",
-            ownerid: vars.currentProject.sppProjectId,
+            ownerid: vars.createDocOwnerId,
             base64_data: payload.VersionData[0],
             size: payload.ContentSize,
             owner_type: "Project"

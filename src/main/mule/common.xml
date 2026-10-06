@@ -121,7 +121,19 @@ vars.existingProjectCreationResults default[]  ++ [{
 						<logger level="INFO" doc:name="Logger" doc:id="3e1e292b-d526-47c7-9076-9a9259f12927" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Handling document attachment for Existing project Document already exists for ProjectId',&#10;&quot;sppProjectId&quot; : vars.sppProject.oaProjectId default &quot;&quot;&#10;}]"/>
           </when>
 					<otherwise>
-						<set-variable value="#[vars.currentLineItem.Bid_Sheet_ContentDocumentId__c]" doc:name="Set SF Document Id" doc:id="a5a182fd-aa61-46b0-8098-f8d87a410f1c" variableName="bidSheetDocumentId"/>
+						<ee:transform doc:name="Transform Message" doc:id="8539942d-55dd-4111-8106-0378487a6f6a">
+							
+							<ee:variables >
+								<ee:set-variable variableName="createDocOwnerId" ><![CDATA[%dw 2.0
+output application/java
+---
+vars.sppProject.oaProjectId default ""]]></ee:set-variable>
+<ee:set-variable variableName="bidSheetDocumentId" ><![CDATA[%dw 2.0
+output application/java
+---
+vars.currentLineItem.Bid_Sheet_ContentDocumentId__c default ""]]></ee:set-variable>
+							</ee:variables>
+						</ee:transform>
 						<flow-ref name="create-openair-document-subflow-wsc" doc:name="create-openair-document-subflow" doc:id="fcb077d4-d56d-42ae-9c9a-91b9808807db" />
 						<ee:transform doc:name="Aggregate success results" doc:id="c3993e89-cfb9-40b7-b4d9-7dbfad94bc2e" >
 							<ee:variables >
