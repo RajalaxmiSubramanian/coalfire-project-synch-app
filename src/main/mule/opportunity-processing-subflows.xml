@@ -43,7 +43,7 @@ payload.AccountId default "" //Account Id of current executing opportunity]]></e
 						<error-handler doc:id="doc-52fbd2c7">
 							<on-error-continue type="ANY" logException="true" doc:id="doc-f8a1a2d5">
 								<logger level="ERROR" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Error processing Opportunity ',&#10;&#10;&quot;opportunityId&quot; :vars.opportunityId,&#10;&quot;errorDescription&quot; :error.description default ''&#10;}]" category="com.mycompany.sfspp.sf-spp-opportunity-synch-main-flow" doc:id="doc-a1cc033d" />
-								<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;(vars.failedOpportunitiesList default []) ++ [{&#10;  opportunityId: vars.opportunityId default '',&#10;  accountId: vars.accountId default '',&#10;  sppError: vars.sppError default '' ++ vars.wscError default '',&#10;  failureReason: 'OPPORTUNITY_PROCESSING_FAILED',&#10;  processResult: []&#10;}]]" doc:name="Set failedOpportunitiesList" doc:id="63cda7bc-c1b3-45ce-a088-24e4baa62f9a" variableName="failedOpportunitiesList" />
+								<set-variable value="#[%dw 2.0&#10;output application/json&#10;---&#10;(vars.failedOpportunitiesList default []) ++ [{&#10;  opportunityId: vars.opportunityId default '',&#10;  accountId: vars.accountId default '',&#10;  sppError: vars.sppError.description default '' ++ vars.wscError.description default '',&#10;  failureReason: 'OPPORTUNITY_PROCESSING_FAILED',&#10;  errorReason:  vars.failureReason default '',&#10;  processResult: []&#10;}]]" doc:name="Set failedOpportunitiesList" doc:id="63cda7bc-c1b3-45ce-a088-24e4baa62f9a" variableName="failedOpportunitiesList" />
 							</on-error-continue>
 						</error-handler>
 					</try>
@@ -69,7 +69,7 @@ payload.AccountId default "" //Account Id of current executing opportunity]]></e
 			<choice doc:name="Choice" doc:id="f9dbf421-ebcf-43e3-acff-a73a86dd4cfb" >
 				<when expression="#[!isEmpty(vars.wscError) or !isEmpty(vars.oaErrorCode)]">
 					<logger level="INFO" doc:name="Logger" doc:id="1162c309-b742-4de7-9e68-59f0409e192c" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Failed during SPP customer Read call',&#10;&quot;opportunityId&quot; :vars.opportunityId,&#10;&quot;wscError&quot;:vars.wscError default &quot;&quot;,&#10;&quot;oaErrorCode&quot; : vars.oaErrorCode default &quot;&quot;&#10;}]"/>
-					<set-variable value='#["SPP Read Customer Failed. Detailed Error: " ++ (vars.wscError.description default "") ++ "OA Error Code:" ++ (vars.oaErrorCode default "")]' doc:name="failureReason" doc:id="bc107fb0-1ccd-4f3a-bab3-66d2f2bbc2c9" variableName="failureReason" />
+					<set-variable value='#[%dw 2.0&#10;output application/json&#10;---&#10;"SPP Read Customer Failed. Detailed Error: " ++ (vars.wscError.description default "") ++ "OA Error Code:" ++ (vars.oaErrorCode default "")]' doc:name="failureReason" doc:id="bc107fb0-1ccd-4f3a-bab3-66d2f2bbc2c9" variableName="failureReason" />
 					<raise-error doc:name="Raise error" doc:id="ebf4106c-d8c3-40b5-8b56-3baa00ab637d" type="APP:OPP_PROCESS_ERROR" description='#[vars.failureReason]' />
 				</when>
 				<otherwise >
@@ -89,7 +89,7 @@ payload.AccountId default "" //Account Id of current executing opportunity]]></e
 							<choice doc:name="Choice" doc:id="c02d77d1-fb72-4385-85f6-2fa411a1ac71">
 								<when expression="#[!isEmpty(vars.wscError) or !isEmpty(vars.oaErrorCode)]">
 									<logger level="INFO" doc:name="Logger" doc:id="80f0afe2-216e-4e12-b46f-6c37cd0286ac" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Failed during SPP customer create call',&#10;&quot;opportunityId&quot; :vars.opportunityId,&#10;&quot;wscError&quot;:vars.wscError default &quot;&quot;,&#10;&quot;oaErrorCode&quot; : vars.oaErrorCode default &quot;&quot;&#10;}]"/>
-									<set-variable value='#["SPP Create Customer Failed. Detailed Error: " ++ (vars.wscError.description default "") ++ "OA Error Code:" ++ (vars.oaErrorCode default "")]' doc:name="failureReason" doc:id="ac74273c-bb1a-40f4-b4ac-bc8ccb01e4b2" variableName="failureReason" />
+									<set-variable value='#[%dw 2.0&#10;output application/json&#10;---&#10;"SPP Create Customer Failed. Detailed Error: " ++ (vars.wscError.description default "") ++ "OA Error Code:" ++ (vars.oaErrorCode default "")]' doc:name="failureReason" doc:id="ac74273c-bb1a-40f4-b4ac-bc8ccb01e4b2" variableName="failureReason" />
 									<raise-error doc:name="Raise error" doc:id="f379cdf0-2522-4fd2-8e35-ac85b2a42f78" type="APP:OPP_PROCESS_ERROR" description='#[vars.failureReason]' />
 								</when>
 								<otherwise>
@@ -115,6 +115,7 @@ payload.AccountId default "" //Account Id of current executing opportunity]]></e
 									<choice doc:name="Choice" doc:id="c7b7f279-9b96-46ee-ae65-468835819ac4" >
 										<when expression="#[!isEmpty(vars.sfError)]">
 							<logger level="INFO" doc:name="Logger" doc:id="8acf25b3-33f8-4735-8b53-6b356190562b" message="#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;&quot;correlationId&quot;:vars.correlationId,&#10;&quot;message&quot;: 'Salesforce query opportunity line item failed. Detailed Error',&#10;&quot;errorDescription&quot; :vars.sfError default &quot;&quot;&#10;}]"/>
+							<set-variable value='#[%dw 2.0&#10;output application/json&#10;---&#10;"Salesforce Opportunity Line Item Query failed: " ++ vars.sfError.description default ""]' doc:name="Set failure reason" doc:id="e1dbdb33-f152-4619-8847-c3b68b47bd25" variableName="failureReason" />
 							<raise-error doc:name="Raise error" doc:id="4dee3d99-8c4d-43b5-b6bb-43cee2f139b3" type="APP:OPP_PROCESS_ERROR" description='#[vars.sfError.description]'/>
 										
 </when>
@@ -139,10 +140,10 @@ payload.AccountId default "" //Account Id of current executing opportunity]]></e
 							<ee:set-variable variableName="updateSfObject" ><![CDATA[%dw 2.0
 output application/json
 ---
-{
+[{
     Id: vars.opportunityId,
     SPP_Sync_Status__c: "Failed"
- }]]></ee:set-variable>
+ }]]]></ee:set-variable>
 						
 </ee:variables>
 					</ee:transform>
@@ -218,6 +219,7 @@ var failedProjectResults = (vars.combinedLineItemResults default []) filter ((it
             opportunityId: failedProjectResults[0].opportunityId default "",
             accountId: vars.accountId default "",
             failureReason: "OPPORTUNITY_PROCESSING_FAILED",
+            errorReason: "Opportunity Line Item processing failure",
             processResult: failedProjectResults
         }]
     else

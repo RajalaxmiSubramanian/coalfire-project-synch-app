@@ -6,7 +6,7 @@
 	<artifactId>sf-spp-opportunity-synch-app</artifactId>
 	<version>1.0.1-SNAPSHOT</version>
 	<packaging>mule-application</packaging>
-	<name>sf-spp-opportunity-synch-app-v15</name>
+	<name>sf-spp-opportunity-synch-app-v16</name>
 	<description>Mule application deployed via Azure DevOps pipeline to CloudHub 2.0 Private Space</description>
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

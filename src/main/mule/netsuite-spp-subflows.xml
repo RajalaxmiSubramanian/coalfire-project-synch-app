@@ -66,7 +66,7 @@ vars.projectCreationResults filter ((item) -> item.overallSyncStatus == "Success
 								<ee:set-variable variableName="createDocOwnerId" ><![CDATA[%dw 2.0
 output application/java
 ---
-vars.sppProject.oaProjectId default ""]]></ee:set-variable>
+vars.currentProject.sppProjectId default ""]]></ee:set-variable>
 <ee:set-variable variableName="bidSheetDocumentId" ><![CDATA[%dw 2.0
 output application/java
 ---

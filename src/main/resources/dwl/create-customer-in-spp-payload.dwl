@@ -7,7 +7,7 @@ var item = vars.currentOpportunity default {}
     oair#add: {
         objects: {
             oaCustomer: {
-                name: item.Account.Name default "",
+                name1: item.Account.Name default "",
                 company: item.Account.Name default "",
                 addr_addr1: item.Account.BillingStreet default "",
                 addr_city: item.Account.BillingCity default "",

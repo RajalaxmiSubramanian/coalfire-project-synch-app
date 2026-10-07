@@ -174,7 +174,7 @@ vars.existingProjectCreationResults default[]  ++ [{
 				<wsc:headers><![CDATA[#[vars.soapHeader]]]></wsc:headers>
 			</wsc:message>
 		</wsc:consume>
-					<set-variable value='#[%dw 2.0&#10;output application/json&#10;&#10;var oaErrorCode =&#10;    if (vars.soapOperation == "read")&#10;        payload.body.readResponse.ReadResult.errors.oaError.code default null&#10;    else if (vars.soapOperation == "add")&#10;        payload.body.addResponse.addReturn.UpdateResult.oaError.code default null&#10;    else&#10;        null&#10;&#10;---&#10;oaErrorCode]' doc:name="Set OA Error Variable" doc:id="4b740697-a887-4c73-aee1-cdebdfa7397a" variableName="oaErrorCode"/>
+					<set-variable value='#[%dw 2.0&#10;output application/json&#10;&#10;var oaErrorCode =&#10;    if (vars.soapOperation == "read")&#10;        payload.body.readResponse.readReturn.ReadResult.errors.oaError.code default null&#10;    else if (vars.soapOperation == "add")&#10;        payload.body.addResponse.addReturn.UpdateResult.errors.oaError.code default null&#10;    else&#10;        null&#10;&#10;---&#10;oaErrorCode]' doc:name="Set OA Error Variable" doc:id="4b740697-a887-4c73-aee1-cdebdfa7397a" variableName="oaErrorCode"/>
 					<set-variable value="#[null]" doc:name="Set Variable" doc:id="5dfd0bbf-62a0-4a78-9f5f-388fc61b662d" variableName="wscError"/>
 					<logger level="INFO" doc:name="Logger" doc:id="e6d16ba8-955b-475f-a90b-ae7371670c0f" message='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;"correlationId":vars.correlationId,&#10;"soapOperation": vars.soapOperation,&#10;"message": "Soap Response received from SPP"&#10;}]' />
 					<error-handler>
@@ -209,7 +209,7 @@ vars.existingProjectCreationResults default[]  ++ [{
 						<wsc:headers><![CDATA[#[vars.soapHeader]]]></wsc:headers>
 					</wsc:message>
 				</wsc:consume>
-				<set-variable value='#[%dw 2.0&#10;output application/json&#10;&#10;var oaErrorCode =&#10;    if (vars.soapOperation == "read")&#10;        payload.body.readResponse.ReadResult.errors.oaError.code default null&#10;    else if (vars.soapOperation == "add")&#10;        payload.body.addResponse.addReturn.UpdateResult.oaError.code default null&#10;    else&#10;        null&#10;&#10;---&#10;oaErrorCode]' doc:name="Set oaErrorCode" doc:id="51d9d4a2-cc00-4969-b8b4-fb79bba7df6a" variableName="oaErrorCode" />
+					<set-variable value='#[%dw 2.0&#10;output application/json&#10;&#10;var oaErrorCode =&#10;    if (vars.soapOperation == "read")&#10;        payload.body.readResponse.readReturn.ReadResult.errors.oaError.code default null&#10;    else if (vars.soapOperation == "add")&#10;        payload.body.addResponse.addReturn.UpdateResult.errors.oaError.code default null&#10;    else&#10;        null&#10;&#10;---&#10;oaErrorCode]' doc:name="Set OA Error Variable" doc:id="99590613-b4bb-46dd-a0d4-3b15e8c964e8" variableName="oaErrorCode" />
 					<set-variable value="#[null]" doc:name="Set Variable" doc:id="1106f214-b558-4b66-b37d-11e0b7d1f617" variableName="wscError"/>
 					<logger level="INFO" doc:name="Logger" doc:id="803e600b-eff7-47a9-9d33-a851b8918c9a" message='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10;"correlationId":vars.correlationId,&#10;"soapOperation": vars.soapOperation,&#10;"message": "Soap Response received from SPP"&#10;}]' />
 					<error-handler>
